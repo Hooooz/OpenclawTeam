@@ -73,7 +73,11 @@ export type StartRunResult =
     }
   | {
       ok: false;
-      code: "AGENT_NOT_FOUND" | "AGENT_PAUSED";
+      code:
+        | "AGENT_NOT_FOUND"
+        | "AGENT_PAUSED"
+        | "SCHEDULE_NOT_FOUND"
+        | "SCHEDULE_PAUSED";
       message: string;
     };
 

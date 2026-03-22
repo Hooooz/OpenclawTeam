@@ -342,6 +342,27 @@ a {
   padding: 18px;
 }
 
+.run-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.run-actions button {
+  min-height: 40px;
+  border: 1px solid rgba(28, 36, 48, 0.12);
+  border-radius: 12px;
+  padding: 0 14px;
+  background: #4b6a3d;
+  color: #fff8f0;
+  font: inherit;
+  cursor: pointer;
+}
+
+.run-actions .danger-button {
+  background: #9a3d2d;
+}
+
 .mini-card-meta {
   display: flex;
   flex-wrap: wrap;

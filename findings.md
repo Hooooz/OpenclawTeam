@@ -73,3 +73,7 @@
   - create schedule for `agent-skill-audit`
   - pause the created schedule
   - `GET /api/dashboard` now returns 3 schedule records and reflects the paused status
+- Schedule-triggered execution is now verified remotely:
+  - `POST /api/schedules/:id/trigger` creates a `triggerType: schedule` run
+  - a subsequent `PATCH /api/runs/:id` can resolve the run to `success` or `failed`
+  - `GET /api/dashboard` now reflects the updated run list and run status changes

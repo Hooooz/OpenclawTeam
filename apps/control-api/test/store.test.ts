@@ -125,3 +125,73 @@ test("updateScheduleStatus changes only the target schedule status", async () =>
     await rm(tempDir, { recursive: true, force: true });
   }
 });
+
+test("triggerScheduleRun creates a schedule-triggered run for an active schedule", async () => {
+  const { tempDir, store } = await loadStoreWithTempDir();
+
+  try {
+    const beforeRuns = await store.listRuns();
+    const result = await store.triggerScheduleRun("schedule-ops-daily-0900");
+
+    assert.equal(result.ok, true);
+
+    if (!result.ok) {
+      return;
+    }
+
+    assert.equal(result.run.agentName, "运营日报助手");
+    assert.equal(result.run.triggerType, "schedule");
+    assert.match(result.run.summary, /运营日报晨间执行/);
+
+    const afterRuns = await store.listRuns();
+    assert.equal(afterRuns.length, beforeRuns.length + 1);
+    assert.equal(afterRuns[0]?.id, result.run.id);
+  } finally {
+    delete process.env.CONTROL_PLANE_DATA_DIR;
+    await rm(tempDir, { recursive: true, force: true });
+  }
+});
+
+test("triggerScheduleRun rejects a paused schedule", async () => {
+  const { tempDir, store } = await loadStoreWithTempDir();
+
+  try {
+    await store.updateScheduleStatus("schedule-ops-daily-0900", "paused");
+    const beforeRuns = await store.listRuns();
+    const result = await store.triggerScheduleRun("schedule-ops-daily-0900");
+
+    assert.deepEqual(result, {
+      ok: false,
+      code: "SCHEDULE_PAUSED",
+      message: "Schedule is paused"
+    });
+
+    const afterRuns = await store.listRuns();
+    assert.equal(afterRuns.length, beforeRuns.length);
+  } finally {
+    delete process.env.CONTROL_PLANE_DATA_DIR;
+    await rm(tempDir, { recursive: true, force: true });
+  }
+});
+
+test("updateRunStatus updates the target run status and summary", async () => {
+  const { tempDir, store } = await loadStoreWithTempDir();
+
+  try {
+    const updated = await store.updateRunStatus("run-20260322-002", "success", "巡检完成。");
+
+    assert.equal(updated?.status, "success");
+    assert.equal(updated?.summary, "巡检完成。");
+
+    const runs = await store.listRuns();
+    const target = runs.find((item: { id: string }) => item.id === "run-20260322-002");
+    const untouched = runs.find((item: { id: string }) => item.id === "run-20260322-003");
+
+    assert.equal(target?.status, "success");
+    assert.equal(target?.summary, "巡检完成。");
+    assert.equal(untouched?.status, "failed");
+  } finally {
+    delete process.env.CONTROL_PLANE_DATA_DIR;
+    await rm(tempDir, { recursive: true, force: true });
+  }
+});

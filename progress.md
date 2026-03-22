@@ -56,3 +56,11 @@
   - `POST /api/schedules` succeeded
   - `PATCH /api/schedules/:id/status` succeeded
   - `GET /api/dashboard` returned updated schedule count and records
+- Added run lifecycle control in the current session:
+  - schedule cards can trigger runs directly
+  - running runs can be resolved as `success` or `failed`
+  - store tests now cover run resolution
+- Verified run lifecycle remotely:
+  - `POST /api/schedules/schedule-ops-daily-0900/trigger` returned a new run
+  - `PATCH /api/runs/run-20260322102817` returned the updated `success` state
+  - `GET /api/dashboard` now returns 6 runs with the latest result at the top

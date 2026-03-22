@@ -23,6 +23,7 @@ Evolve the documented internal OpenClaw digital-employee control plane into a wo
 | Deployment verification | complete | Redeployed latest slice and verified the runtime flow on `192.168.31.189` |
 | Deployment hardening | in_progress | Keep stabilizing Windows deployment automation and remove GitHub-sync friction |
 | Schedule management | complete | Schedule create and pause/resume are working in UI and API |
+| Run lifecycle control | complete | Schedule-triggered runs and manual status resolution are verified |
 
 ## Key Decisions
 
@@ -66,4 +67,5 @@ Evolve the documented internal OpenClaw digital-employee control plane into a wo
 - Current implementation baseline is a monorepo deployed to the Windows server with Node-process fallback.
 - The latest completed milestone converted `Runs` from static display into an executable, durable control-plane flow.
 - The next completed milestone introduced `Schedules` as a first-class control-plane object with create and pause/resume flows.
+- The latest completed milestone lets control-plane operators trigger schedule runs and resolve run results from the UI/API.
 - The current follow-up focus is reducing operational friction around Windows deployment persistence and GitHub synchronization.

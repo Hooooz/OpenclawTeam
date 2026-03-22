@@ -246,6 +246,15 @@ export async function updateAgentSkillBindings(agentId: string, skillIds: string
   return agent;
 }
 
+function createRunningRun(agentName: string, triggerType: "manual" | "schedule", summary: string) {
+  return createRunRecord({
+    agentName,
+    triggerType,
+    status: "running",
+    summary
+  });
+}
+
 export async function startManualRun(agentId: string): Promise<StartRunResult> {
   const store = await readStore();
   const agent = store.agents.find((item) => item.id === agentId);
@@ -266,12 +275,7 @@ export async function startManualRun(agentId: string): Promise<StartRunResult> {
     };
   }
 
-  const run = createRunRecord({
-    agentName: agent.name,
-    triggerType: "manual",
-    status: "running",
-    summary: "已从控制台手动触发，等待执行器接管。"
-  });
+  const run = createRunningRun(agent.name, "manual", "已从控制台手动触发，等待执行器接管。");
 
   store.runs = [run, ...store.runs];
   await writeStore(store);
@@ -280,4 +284,77 @@ export async function startManualRun(agentId: string): Promise<StartRunResult> {
     ok: true,
     run
   };
+}
+
+export async function triggerScheduleRun(scheduleId: string): Promise<StartRunResult> {
+  const store = await readStore();
+  const schedule = store.schedules.find((item) => item.id === scheduleId);
+
+  if (!schedule) {
+    return {
+      ok: false,
+      code: "SCHEDULE_NOT_FOUND",
+      message: "Schedule not found"
+    };
+  }
+
+  if (schedule.status === "paused") {
+    return {
+      ok: false,
+      code: "SCHEDULE_PAUSED",
+      message: "Schedule is paused"
+    };
+  }
+
+  const agent = store.agents.find((item) => item.id === schedule.agentId);
+
+  if (!agent) {
+    return {
+      ok: false,
+      code: "AGENT_NOT_FOUND",
+      message: "Agent not found"
+    };
+  }
+
+  if (agent.status === "paused") {
+    return {
+      ok: false,
+      code: "AGENT_PAUSED",
+      message: "Agent is paused"
+    };
+  }
+
+  const run = createRunningRun(
+    agent.name,
+    "schedule",
+    `已由调度计划「${schedule.name}」触发，等待执行器接管。`
+  );
+
+  store.runs = [run, ...store.runs];
+  await writeStore(store);
+
+  return {
+    ok: true,
+    run
+  };
+}
+
+export async function updateRunStatus(
+  runId: string,
+  status: "success" | "failed",
+  summary: string
+) {
+  const store = await readStore();
+  const run = store.runs.find((item) => item.id === runId);
+
+  if (!run) {
+    return null;
+  }
+
+  run.status = status;
+  run.summary = summary.trim() || run.summary;
+
+  await writeStore(store);
+
+  return run;
 }

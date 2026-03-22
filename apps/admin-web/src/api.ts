@@ -86,6 +86,38 @@ export async function updateScheduleStatus(
   return response.json() as Promise<{ ok: true }>;
 }
 
+export async function triggerScheduleRun(scheduleId: string) {
+  const response = await fetch(`${API_BASE_URL}/api/schedules/${scheduleId}/trigger`, {
+    method: "POST"
+  });
+
+  if (!response.ok) {
+    throw new Error(`Trigger schedule run failed with status ${response.status}`);
+  }
+
+  return response.json() as Promise<{ ok: true }>;
+}
+
+export async function updateRunStatus(
+  runId: string,
+  status: "success" | "failed",
+  summary: string
+) {
+  const response = await fetch(`${API_BASE_URL}/api/runs/${runId}`, {
+    method: "PATCH",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({ status, summary })
+  });
+
+  if (!response.ok) {
+    throw new Error(`Update run status failed with status ${response.status}`);
+  }
+
+  return response.json() as Promise<{ ok: true }>;
+}
+
 export async function updateAgentSkillBindings(agentId: string, skillIds: string[]) {
   const response = await fetch(`${API_BASE_URL}/api/agents/${agentId}/skills`, {
     method: "PATCH",

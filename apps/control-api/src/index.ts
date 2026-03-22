@@ -17,6 +17,8 @@ import {
   listSchedules,
   listSkills,
   startManualRun,
+  triggerScheduleRun,
+  updateRunStatus,
   updateScheduleStatus,
   updateAgentSkillBindings
 } from "./store.js";
@@ -166,6 +168,25 @@ app.patch<{ Params: { scheduleId: string }; Body: { status: "active" | "paused" 
   }
 );
 
+app.post<{ Params: { scheduleId: string } }>(
+  "/api/schedules/:scheduleId/trigger",
+  async (request, reply) => {
+    const { scheduleId } = request.params;
+    const result = await triggerScheduleRun(scheduleId);
+
+    if (!result.ok) {
+      const statusCode =
+        result.code === "SCHEDULE_NOT_FOUND" || result.code === "AGENT_NOT_FOUND"
+          ? 404
+          : 409;
+
+      return reply.status(statusCode).send(result);
+    }
+
+    return reply.status(201).send(result);
+  }
+);
+
 app.post<{ Body: TriggerRunInput }>("/api/runs", async (request, reply) => {
   const agentId = request.body?.agentId?.trim();
 
@@ -184,6 +205,36 @@ app.post<{ Body: TriggerRunInput }>("/api/runs", async (request, reply) => {
   }
 
   return reply.status(201).send(result);
+});
+
+app.patch<{
+  Params: { runId: string };
+  Body: { status: "success" | "failed"; summary?: string };
+}>("/api/runs/:runId", async (request, reply) => {
+  const { runId } = request.params;
+  const status = request.body?.status;
+  const summary = request.body?.summary || "";
+
+  if (status !== "success" && status !== "failed") {
+    return reply.status(400).send({
+      ok: false,
+      message: "status must be success or failed"
+    });
+  }
+
+  const run = await updateRunStatus(runId, status, summary);
+
+  if (!run) {
+    return reply.status(404).send({
+      ok: false,
+      message: "Run not found"
+    });
+  }
+
+  return reply.send({
+    ok: true,
+    run
+  });
 });
 
 app.setErrorHandler((error, _request, reply) => {

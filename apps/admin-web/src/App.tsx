@@ -15,7 +15,9 @@ import {
   createSchedule as createScheduleRequest,
   createSkill as createSkillRequest,
   fetchDashboardSnapshot,
+  triggerScheduleRun as triggerScheduleRunRequest,
   triggerRun as triggerRunRequest,
+  updateRunStatus as updateRunStatusRequest,
   updateScheduleStatus as updateScheduleStatusRequest,
   updateAgentSkillBindings as updateAgentSkillBindingsRequest
 } from "./api";
@@ -85,6 +87,11 @@ export function App() {
     await loadSnapshot();
   }
 
+  async function handleTriggerScheduleRun(scheduleId: string) {
+    await triggerScheduleRunRequest(scheduleId);
+    await loadSnapshot();
+  }
+
   async function handleUpdateAgentSkills(agentId: string, skillIds: string[]) {
     await updateAgentSkillBindingsRequest(agentId, skillIds);
     await loadSnapshot();
@@ -92,6 +99,15 @@ export function App() {
 
   async function handleTriggerRun(agentId: string) {
     await triggerRunRequest({ agentId });
+    await loadSnapshot();
+  }
+
+  async function handleUpdateRunStatus(
+    runId: string,
+    status: "success" | "failed",
+    summary: string
+  ) {
+    await updateRunStatusRequest(runId, status, summary);
     await loadSnapshot();
   }
 
@@ -170,6 +186,7 @@ export function App() {
                 <SchedulesPage
                   agents={state.data.agents}
                   onCreateSchedule={handleCreateSchedule}
+                  onTriggerScheduleRun={handleTriggerScheduleRun}
                   onUpdateScheduleStatus={handleUpdateScheduleStatus}
                   schedules={state.data.schedules}
                 />
@@ -181,6 +198,7 @@ export function App() {
                 <RunsPage
                   agents={state.data.agents}
                   onTriggerRun={handleTriggerRun}
+                  onUpdateRunStatus={handleUpdateRunStatus}
                   runs={state.data.runs}
                 />
               }
@@ -238,11 +256,13 @@ function DashboardPage({ snapshot }: { snapshot: DashboardSnapshot }) {
 function SchedulesPage({
   agents,
   onCreateSchedule,
+  onTriggerScheduleRun,
   onUpdateScheduleStatus,
   schedules
 }: {
   agents: AgentRecord[];
   onCreateSchedule: (input: CreateScheduleInput) => Promise<void>;
+  onTriggerScheduleRun: (scheduleId: string) => Promise<void>;
   onUpdateScheduleStatus: (
     scheduleId: string,
     status: "active" | "paused"
@@ -257,6 +277,7 @@ function SchedulesPage({
   const [status, setStatus] = useState<"active" | "paused">("active");
   const [submitting, setSubmitting] = useState(false);
   const [savingScheduleId, setSavingScheduleId] = useState<string | null>(null);
+  const [triggeringScheduleId, setTriggeringScheduleId] = useState<string | null>(null);
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -284,6 +305,16 @@ function SchedulesPage({
       );
     } finally {
       setSavingScheduleId(null);
+    }
+  }
+
+  async function handleTrigger(scheduleId: string) {
+    setTriggeringScheduleId(scheduleId);
+
+    try {
+      await onTriggerScheduleRun(scheduleId);
+    } finally {
+      setTriggeringScheduleId(null);
     }
   }
 
@@ -358,6 +389,13 @@ function SchedulesPage({
               <span>{schedule.cron}</span>
               <span>{schedule.nextRunAt}</span>
             </div>
+            <button
+              disabled={schedule.status !== "active" || triggeringScheduleId === schedule.id}
+              onClick={() => void handleTrigger(schedule.id)}
+              type="button"
+            >
+              {triggeringScheduleId === schedule.id ? "执行中..." : "立即执行"}
+            </button>
             <button
               disabled={savingScheduleId === schedule.id}
               onClick={() => void handleToggle(schedule)}
@@ -611,13 +649,20 @@ function SkillsPage({
 function RunsPage({
   agents,
   onTriggerRun,
+  onUpdateRunStatus,
   runs
 }: {
   agents: AgentRecord[];
   onTriggerRun: (agentId: string) => Promise<void>;
+  onUpdateRunStatus: (
+    runId: string,
+    status: "success" | "failed",
+    summary: string
+  ) => Promise<void>;
   runs: RunRecord[];
 }) {
   const [triggeringAgentId, setTriggeringAgentId] = useState<string | null>(null);
+  const [savingRunId, setSavingRunId] = useState<string | null>(null);
 
   async function handleTrigger(agentId: string) {
     setTriggeringAgentId(agentId);
@@ -626,6 +671,20 @@ function RunsPage({
       await onTriggerRun(agentId);
     } finally {
       setTriggeringAgentId(null);
+    }
+  }
+
+  async function handleResolveRun(run: RunRecord, status: "success" | "failed") {
+    setSavingRunId(run.id);
+
+    try {
+      await onUpdateRunStatus(
+        run.id,
+        status,
+        status === "success" ? "已在控制台回填完成结果。" : "已在控制台回填失败结果。"
+      );
+    } finally {
+      setSavingRunId(null);
     }
   }
 
@@ -676,6 +735,25 @@ function RunsPage({
                 <span>{run.startedAt}</span>
                 <span>{run.traceId}</span>
               </div>
+              {run.status === "running" && (
+                <div className="run-actions">
+                  <button
+                    disabled={savingRunId === run.id}
+                    onClick={() => void handleResolveRun(run, "success")}
+                    type="button"
+                  >
+                    {savingRunId === run.id ? "保存中..." : "标记成功"}
+                  </button>
+                  <button
+                    className="danger-button"
+                    disabled={savingRunId === run.id}
+                    onClick={() => void handleResolveRun(run, "failed")}
+                    type="button"
+                  >
+                    {savingRunId === run.id ? "保存中..." : "标记失败"}
+                  </button>
+                </div>
+              )}
             </div>
           </article>
         ))}
