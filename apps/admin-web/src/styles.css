@@ -174,9 +174,19 @@ a {
   margin-bottom: 20px;
 }
 
+.skill-form {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  margin-bottom: 20px;
+}
+
 .agent-form input,
+.skill-form input,
 .agent-form select,
-.agent-form button {
+.skill-form select,
+.agent-form button,
+.skill-form button {
   width: 100%;
   min-height: 46px;
   border: 1px solid rgba(28, 36, 48, 0.12);
@@ -192,9 +202,20 @@ a {
   cursor: pointer;
 }
 
-.agent-form button:disabled {
+.skill-form button {
+  background: #8a4c1b;
+  color: #fff8f0;
+  cursor: pointer;
+}
+
+.agent-form button:disabled,
+.skill-form button:disabled {
   cursor: wait;
   opacity: 0.7;
+}
+
+.agent-record {
+  border-top: 1px solid rgba(28, 36, 48, 0.08);
 }
 
 .badge {
@@ -238,7 +259,44 @@ a {
 
 .table-row {
   padding: 14px 0;
-  border-top: 1px solid rgba(28, 36, 48, 0.08);
+}
+
+.binding-box {
+  display: grid;
+  gap: 12px;
+  padding: 0 0 16px;
+}
+
+.binding-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.skill-chip-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.skill-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  border-radius: 999px;
+  border: 1px solid rgba(23, 50, 74, 0.16);
+  background: rgba(255, 255, 255, 0.76);
+}
+
+.skill-chip-active {
+  background: rgba(208, 140, 69, 0.18);
+  border-color: rgba(208, 140, 69, 0.34);
+}
+
+.skill-chip input {
+  margin: 0;
 }
 
 .timeline {
@@ -293,6 +351,10 @@ a {
   }
 
   .agent-form {
+    grid-template-columns: 1fr;
+  }
+
+  .skill-form {
     grid-template-columns: 1fr;
   }
 }

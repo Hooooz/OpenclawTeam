@@ -3,11 +3,17 @@ import { NavLink, Route, Routes } from "react-router-dom";
 import type {
   AgentRecord,
   CreateAgentInput,
+  CreateSkillInput,
   DashboardSnapshot,
   RunRecord,
   SkillRecord
 } from "@openclaw/shared";
-import { createAgent as createAgentRequest, fetchDashboardSnapshot } from "./api";
+import {
+  createAgent as createAgentRequest,
+  createSkill as createSkillRequest,
+  fetchDashboardSnapshot,
+  updateAgentSkillBindings as updateAgentSkillBindingsRequest
+} from "./api";
 
 type LoadState =
   | { status: "loading" }
@@ -55,6 +61,16 @@ export function App() {
     await loadSnapshot();
   }
 
+  async function handleCreateSkill(input: CreateSkillInput) {
+    await createSkillRequest(input);
+    await loadSnapshot();
+  }
+
+  async function handleUpdateAgentSkills(agentId: string, skillIds: string[]) {
+    await updateAgentSkillBindingsRequest(agentId, skillIds);
+    await loadSnapshot();
+  }
+
   return (
     <div className="shell">
       <aside className="sidebar">
@@ -83,7 +99,7 @@ export function App() {
         <div className="sidebar-card">
           <p className="sidebar-label">部署目标</p>
           <strong>192.168.31.189</strong>
-          <p className="muted">Windows 11 + Docker Compose</p>
+          <p className="muted">Windows 11 + Docker / Node fallback</p>
         </div>
       </aside>
 
@@ -107,10 +123,23 @@ export function App() {
             <Route
               path="/agents"
               element={
-                <AgentsPage agents={state.data.agents} onCreateAgent={handleCreateAgent} />
+                <AgentsPage
+                  agents={state.data.agents}
+                  skills={state.data.skills}
+                  onCreateAgent={handleCreateAgent}
+                  onUpdateAgentSkills={handleUpdateAgentSkills}
+                />
               }
             />
-            <Route path="/skills" element={<SkillsPage skills={state.data.skills} />} />
+            <Route
+              path="/skills"
+              element={
+                <SkillsPage
+                  skills={state.data.skills}
+                  onCreateSkill={handleCreateSkill}
+                />
+              }
+            />
             <Route path="/runs" element={<RunsPage runs={state.data.runs} />} />
             <Route path="/deploy" element={<DeployPage snapshot={state.data} />} />
           </Routes>
@@ -127,7 +156,7 @@ function DashboardPage({ snapshot }: { snapshot: DashboardSnapshot }) {
         <p className="eyebrow">Control Plane</p>
         <h2>把 OpenClaw 收敛成一个能运营的内部系统</h2>
         <p className="muted">
-          当前骨架聚焦 5 条线：对象管理、任务执行、调度、日志审计、服务器部署。
+          当前主线已经进入可写阶段：数字员工、Skills 与绑定关系都可以进后台。
         </p>
       </section>
 
@@ -163,16 +192,21 @@ function DashboardPage({ snapshot }: { snapshot: DashboardSnapshot }) {
 
 function AgentsPage({
   agents,
-  onCreateAgent
+  skills,
+  onCreateAgent,
+  onUpdateAgentSkills
 }: {
   agents: AgentRecord[];
+  skills: SkillRecord[];
   onCreateAgent: (input: CreateAgentInput) => Promise<void>;
+  onUpdateAgentSkills: (agentId: string, skillIds: string[]) => Promise<void>;
 }) {
   const [name, setName] = useState("");
   const [model, setModel] = useState("gpt-5.4-mini");
   const [summary, setSummary] = useState("");
   const [status, setStatus] = useState<"active" | "paused">("active");
   const [submitting, setSubmitting] = useState(false);
+  const [savingAgentId, setSavingAgentId] = useState<string | null>(null);
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -189,6 +223,20 @@ function AgentsPage({
     }
   }
 
+  async function handleToggleSkill(agent: AgentRecord, skillId: string) {
+    const nextSkillIds = agent.skillIds.includes(skillId)
+      ? agent.skillIds.filter((id) => id !== skillId)
+      : [...agent.skillIds, skillId];
+
+    setSavingAgentId(agent.id);
+
+    try {
+      await onUpdateAgentSkills(agent.id, nextSkillIds);
+    } finally {
+      setSavingAgentId(null);
+    }
+  }
+
   return (
     <section className="panel">
       <div className="panel-header">
@@ -198,6 +246,7 @@ function AgentsPage({
         </div>
         <span className="badge">{agents.length} 个对象</span>
       </div>
+
       <form className="agent-form" onSubmit={handleSubmit}>
         <input
           placeholder="数字员工名称"
@@ -217,7 +266,10 @@ function AgentsPage({
           value={summary}
           onChange={(event) => setSummary(event.target.value)}
         />
-        <select value={status} onChange={(event) => setStatus(event.target.value as "active" | "paused")}>
+        <select
+          value={status}
+          onChange={(event) => setStatus(event.target.value as "active" | "paused")}
+        >
           <option value="active">active</option>
           <option value="paused">paused</option>
         </select>
@@ -225,6 +277,7 @@ function AgentsPage({
           {submitting ? "创建中..." : "创建 Agent"}
         </button>
       </form>
+
       <div className="table">
         <div className="table-head">
           <span>名称</span>
@@ -234,12 +287,38 @@ function AgentsPage({
           <span>说明</span>
         </div>
         {agents.map((agent) => (
-          <div className="table-row" key={agent.id}>
-            <span>{agent.name}</span>
-            <span>{agent.status}</span>
-            <span>{agent.model}</span>
-            <span>{agent.skillCount}</span>
-            <span>{agent.summary}</span>
+          <div className="agent-record" key={agent.id}>
+            <div className="table-row">
+              <span>{agent.name}</span>
+              <span>{agent.status}</span>
+              <span>{agent.model}</span>
+              <span>{agent.skillCount}</span>
+              <span>{agent.summary}</span>
+            </div>
+            <div className="binding-box">
+              <div className="binding-header">
+                <strong>绑定 Skills</strong>
+                {savingAgentId === agent.id && <span className="muted">保存中...</span>}
+              </div>
+              <div className="skill-chip-grid">
+                {skills.map((skill) => {
+                  const checked = agent.skillIds.includes(skill.id);
+                  return (
+                    <label
+                      className={checked ? "skill-chip skill-chip-active" : "skill-chip"}
+                      key={`${agent.id}-${skill.id}`}
+                    >
+                      <input
+                        checked={checked}
+                        onChange={() => void handleToggleSkill(agent, skill.id)}
+                        type="checkbox"
+                      />
+                      <span>{skill.name}</span>
+                    </label>
+                  );
+                })}
+              </div>
+            </div>
           </div>
         ))}
       </div>
@@ -247,7 +326,36 @@ function AgentsPage({
   );
 }
 
-function SkillsPage({ skills }: { skills: SkillRecord[] }) {
+function SkillsPage({
+  skills,
+  onCreateSkill
+}: {
+  skills: SkillRecord[];
+  onCreateSkill: (input: CreateSkillInput) => Promise<void>;
+}) {
+  const [name, setName] = useState("");
+  const [category, setCategory] = useState("custom");
+  const [version, setVersion] = useState("1.0.0");
+  const [description, setDescription] = useState("");
+  const [status, setStatus] = useState<"active" | "draft">("draft");
+  const [submitting, setSubmitting] = useState(false);
+
+  async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setSubmitting(true);
+
+    try {
+      await onCreateSkill({ name, category, version, description, status });
+      setName("");
+      setCategory("custom");
+      setVersion("1.0.0");
+      setDescription("");
+      setStatus("draft");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
   return (
     <section className="panel">
       <div className="panel-header">
@@ -257,6 +365,44 @@ function SkillsPage({ skills }: { skills: SkillRecord[] }) {
         </div>
         <span className="badge">{skills.length} 个能力</span>
       </div>
+
+      <form className="skill-form" onSubmit={handleSubmit}>
+        <input
+          placeholder="Skill 名称"
+          required
+          value={name}
+          onChange={(event) => setName(event.target.value)}
+        />
+        <input
+          placeholder="分类"
+          required
+          value={category}
+          onChange={(event) => setCategory(event.target.value)}
+        />
+        <input
+          placeholder="版本"
+          required
+          value={version}
+          onChange={(event) => setVersion(event.target.value)}
+        />
+        <input
+          placeholder="描述"
+          required
+          value={description}
+          onChange={(event) => setDescription(event.target.value)}
+        />
+        <select
+          value={status}
+          onChange={(event) => setStatus(event.target.value as "active" | "draft")}
+        >
+          <option value="draft">draft</option>
+          <option value="active">active</option>
+        </select>
+        <button disabled={submitting} type="submit">
+          {submitting ? "创建中..." : "创建 Skill"}
+        </button>
+      </form>
+
       <div className="card-grid">
         {skills.map((skill) => (
           <article className="mini-card" key={skill.id}>

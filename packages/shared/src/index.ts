@@ -4,6 +4,7 @@ export type AgentRecord = {
   status: "active" | "paused";
   model: string;
   skillCount: number;
+  skillIds: string[];
   summary: string;
 };
 
@@ -21,6 +22,14 @@ export type SkillRecord = {
   version: string;
   status: "active" | "draft";
   description: string;
+};
+
+export type CreateSkillInput = {
+  name: string;
+  category: string;
+  version: string;
+  description: string;
+  status?: "active" | "draft";
 };
 
 export type RunRecord = {
@@ -60,33 +69,6 @@ export type DashboardSnapshot = {
   server: ServerInfo;
 };
 
-export const seedAgents: AgentRecord[] = [
-  {
-    id: "agent-ops-daily",
-    name: "运营日报助手",
-    status: "active",
-    model: "gpt-5.4-mini",
-    skillCount: 4,
-    summary: "定时汇总内部素材并生成日报。"
-  },
-  {
-    id: "agent-skill-audit",
-    name: "Skill 巡检助手",
-    status: "active",
-    model: "gpt-5.4",
-    skillCount: 3,
-    summary: "检查技能调用状态和最近失败记录。"
-  },
-  {
-    id: "agent-doc-backfill",
-    name: "文档补全助手",
-    status: "paused",
-    model: "gpt-5.4-mini",
-    skillCount: 2,
-    summary: "辅助维护项目文档和待办清单。"
-  }
-];
-
 export const seedSkills: SkillRecord[] = [
   {
     id: "skill-docx",
@@ -119,6 +101,36 @@ export const seedSkills: SkillRecord[] = [
     version: "1.0.0",
     status: "draft",
     description: "多来源检索和带引用研究输出。"
+  }
+];
+
+export const seedAgents: AgentRecord[] = [
+  {
+    id: "agent-ops-daily",
+    name: "运营日报助手",
+    status: "active",
+    model: "gpt-5.4-mini",
+    skillCount: 4,
+    skillIds: ["skill-docx", "skill-xlsx", "skill-browser", "skill-research"],
+    summary: "定时汇总内部素材并生成日报。"
+  },
+  {
+    id: "agent-skill-audit",
+    name: "Skill 巡检助手",
+    status: "active",
+    model: "gpt-5.4",
+    skillCount: 3,
+    skillIds: ["skill-browser", "skill-research", "skill-docx"],
+    summary: "检查技能调用状态和最近失败记录。"
+  },
+  {
+    id: "agent-doc-backfill",
+    name: "文档补全助手",
+    status: "paused",
+    model: "gpt-5.4-mini",
+    skillCount: 2,
+    skillIds: ["skill-docx", "skill-xlsx"],
+    summary: "辅助维护项目文档和待办清单。"
   }
 ];
 
@@ -159,35 +171,6 @@ export const seedServerInfo: ServerInfo = {
   repository: "https://github.com/Hooooz/OpenclawTeam.git"
 };
 
-export function createDashboardSnapshot(): DashboardSnapshot {
-  return {
-    stats: [
-      { label: "数字员工", value: String(seedAgents.length), detail: "当前已登记的可管理对象" },
-      { label: "Skills", value: String(seedSkills.length), detail: "已纳入控制面的能力单元" },
-      { label: "近 24h Runs", value: String(seedRuns.length), detail: "含成功、失败与运行中任务" },
-      { label: "部署主机", value: "1", detail: "Windows 单机部署基线已确认" }
-    ],
-    focus: [
-      {
-        title: "后台对象管理",
-        detail: "先把 Agent、Skill、Run Record 三个对象做成可见可管。"
-      },
-      {
-        title: "执行闭环",
-        detail: "从手动运行到错误回执先跑通，再扩调度和知识。"
-      },
-      {
-        title: "Windows 部署基线",
-        detail: "围绕 Docker Compose 形成首个稳定部署包。"
-      }
-    ],
-    agents: seedAgents,
-    skills: seedSkills,
-    runs: seedRuns,
-    server: seedServerInfo
-  };
-}
-
 export function createAgentRecord(input: CreateAgentInput): AgentRecord {
   const slug = input.name
     .trim()
@@ -201,6 +184,24 @@ export function createAgentRecord(input: CreateAgentInput): AgentRecord {
     status: input.status || "active",
     model: input.model.trim(),
     skillCount: 0,
+    skillIds: [],
     summary: input.summary.trim()
+  };
+}
+
+export function createSkillRecord(input: CreateSkillInput): SkillRecord {
+  const slug = input.name
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+
+  return {
+    id: `skill-${slug || Date.now()}`,
+    name: input.name.trim(),
+    category: input.category.trim(),
+    version: input.version.trim(),
+    status: input.status || "draft",
+    description: input.description.trim()
   };
 }
