@@ -9,7 +9,8 @@
 - The local target server is `192.168.31.189`, but from the current session environment SSH returns `No route to host`.
 - The target GitHub repository `https://github.com/Hooooz/OpenclawTeam.git` is reachable and appears empty or without refs from unauthenticated `ls-remote`.
 - A new reachable server login was provided and verified: `Administrator@192.168.31.189`.
-- The server is Windows 11 Pro with PowerShell 5.1, about 15.85 GB RAM, Docker 29.2.0, Docker Compose v5.0.2, Node and npm available, Python available, but Git is not installed.
+- The server is Windows 11 Pro with PowerShell 5.1, about 15.85 GB RAM, Docker 29.2.0, Docker Compose v5.0.2, Node and npm available, Python available.
+- Git is installed on the server and available at `C:\\Program Files\\Git\\cmd\\git.exe`; machine PATH was updated so the host is ready for Git-based deployment flows.
 
 ## Writing Constraints
 
