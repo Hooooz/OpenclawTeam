@@ -11,3 +11,5 @@
 - Current status: all requested documents completed and ready for user review.
 - User then clarified the product scope to internal digital-employee management backend, added a development-process document, and provided local server / GitHub constraints.
 - Rewrote the main documents to align with the internal-control-plane direction and recorded the current deployment connectivity issue.
+- Verified direct SSH login to `Administrator@192.168.31.189`.
+- Confirmed server baseline: Windows 11 Pro, PowerShell 5.1, Docker and Docker Compose available, Git absent.

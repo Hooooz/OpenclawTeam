@@ -8,6 +8,8 @@
 - The user added `主Agent-子Agent协作产品开发模式.md`, which aligns with the three-document specification-first workflow.
 - The local target server is `192.168.31.189`, but from the current session environment SSH returns `No route to host`.
 - The target GitHub repository `https://github.com/Hooooz/OpenclawTeam.git` is reachable and appears empty or without refs from unauthenticated `ls-remote`.
+- A new reachable server login was provided and verified: `Administrator@192.168.31.189`.
+- The server is Windows 11 Pro with PowerShell 5.1, about 15.85 GB RAM, Docker 29.2.0, Docker Compose v5.0.2, Node and npm available, Python available, but Git is not installed.
 
 ## Writing Constraints
 
@@ -29,3 +31,4 @@
   - Audit / Trace
 - Make document 2 closer to engineering execution, repository layout, deployment, and GitHub usage.
 - Make document 3 usable as a review, testing, and deployment acceptance basis.
+- Deployment assumptions should now target a Windows host with Docker Compose available.
