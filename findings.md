@@ -11,6 +11,10 @@
 - A new reachable server login was provided and verified: `Administrator@192.168.31.189`.
 - The server is Windows 11 Pro with PowerShell 5.1, about 15.85 GB RAM, Docker 29.2.0, Docker Compose v5.0.2, Node and npm available, Python available.
 - Git is installed on the server and available at `C:\\Program Files\\Git\\cmd\\git.exe`; machine PATH was updated so the host is ready for Git-based deployment flows.
+- The MVP scaffold was deployed successfully to the Windows server using the Node-process fallback path:
+  - Admin Web: `http://192.168.31.189:3000`
+  - Control API health: `http://192.168.31.189:3001/health`
+- Docker Compose on the server reaches the daemon but currently fails on image pull credentials, so Node fallback is the active deployment mode.
 
 ## Writing Constraints
 
@@ -33,3 +37,6 @@
 - Make document 2 closer to engineering execution, repository layout, deployment, and GitHub usage.
 - Make document 3 usable as a review, testing, and deployment acceptance basis.
 - Deployment assumptions should now target a Windows host with Docker Compose available.
+- Deployment should support dual mode on Windows:
+  - Preferred: Docker Compose when Docker Desktop Linux engine and registry auth are healthy
+  - Fallback: native Node processes managed by PowerShell scripts

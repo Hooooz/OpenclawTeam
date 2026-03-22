@@ -16,3 +16,7 @@
 - Installed / exposed Git on the server and updated machine PATH for future deployment use.
 - Created the MVP monorepo scaffold with admin web, control API, shared package, Docker Compose baseline, and Windows deploy script.
 - Verified `npm run build` and `npm run typecheck` pass locally.
+- Deployed the scaffold to `192.168.31.189` using the Windows Node fallback path after Docker Desktop image-pull auth failed.
+- Verified remote availability from the current environment:
+  - `http://192.168.31.189:3000`
+  - `http://192.168.31.189:3001/health`
