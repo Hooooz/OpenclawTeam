@@ -13,6 +13,9 @@ __pycache__/
 .venv/
 venv/
 *.log
+data/
+logs/
+.runtime/
 tmp/
 .idea/
 .vscode/

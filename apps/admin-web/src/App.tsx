@@ -1,7 +1,13 @@
 import { useEffect, useState } from "react";
 import { NavLink, Route, Routes } from "react-router-dom";
-import type { AgentRecord, DashboardSnapshot, RunRecord, SkillRecord } from "@openclaw/shared";
-import { fetchDashboardSnapshot } from "./api";
+import type {
+  AgentRecord,
+  CreateAgentInput,
+  DashboardSnapshot,
+  RunRecord,
+  SkillRecord
+} from "@openclaw/shared";
+import { createAgent as createAgentRequest, fetchDashboardSnapshot } from "./api";
 
 type LoadState =
   | { status: "loading" }
@@ -19,25 +25,35 @@ const navItems = [
 export function App() {
   const [state, setState] = useState<LoadState>({ status: "loading" });
 
+  async function loadSnapshot() {
+    try {
+      const data = await fetchDashboardSnapshot();
+      setState({ status: "ready", data });
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Unknown dashboard loading error";
+      setState({ status: "error", message });
+    }
+  }
+
   useEffect(() => {
     let cancelled = false;
 
     fetchDashboardSnapshot()
-      .then((data) => {
-        if (!cancelled) {
-          setState({ status: "ready", data });
-        }
-      })
-      .catch((error: Error) => {
-        if (!cancelled) {
-          setState({ status: "error", message: error.message });
-        }
-      });
+      .then((data) => !cancelled && setState({ status: "ready", data }))
+      .catch(
+        (error: Error) => !cancelled && setState({ status: "error", message: error.message })
+      );
 
     return () => {
       cancelled = true;
     };
   }, []);
+
+  async function handleCreateAgent(input: CreateAgentInput) {
+    await createAgentRequest(input);
+    await loadSnapshot();
+  }
 
   return (
     <div className="shell">
@@ -88,7 +104,12 @@ export function App() {
         {state.status === "ready" && (
           <Routes>
             <Route path="/" element={<DashboardPage snapshot={state.data} />} />
-            <Route path="/agents" element={<AgentsPage agents={state.data.agents} />} />
+            <Route
+              path="/agents"
+              element={
+                <AgentsPage agents={state.data.agents} onCreateAgent={handleCreateAgent} />
+              }
+            />
             <Route path="/skills" element={<SkillsPage skills={state.data.skills} />} />
             <Route path="/runs" element={<RunsPage runs={state.data.runs} />} />
             <Route path="/deploy" element={<DeployPage snapshot={state.data} />} />
@@ -140,7 +161,34 @@ function DashboardPage({ snapshot }: { snapshot: DashboardSnapshot }) {
   );
 }
 
-function AgentsPage({ agents }: { agents: AgentRecord[] }) {
+function AgentsPage({
+  agents,
+  onCreateAgent
+}: {
+  agents: AgentRecord[];
+  onCreateAgent: (input: CreateAgentInput) => Promise<void>;
+}) {
+  const [name, setName] = useState("");
+  const [model, setModel] = useState("gpt-5.4-mini");
+  const [summary, setSummary] = useState("");
+  const [status, setStatus] = useState<"active" | "paused">("active");
+  const [submitting, setSubmitting] = useState(false);
+
+  async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setSubmitting(true);
+
+    try {
+      await onCreateAgent({ name, model, summary, status });
+      setName("");
+      setModel("gpt-5.4-mini");
+      setSummary("");
+      setStatus("active");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
   return (
     <section className="panel">
       <div className="panel-header">
@@ -150,6 +198,33 @@ function AgentsPage({ agents }: { agents: AgentRecord[] }) {
         </div>
         <span className="badge">{agents.length} 个对象</span>
       </div>
+      <form className="agent-form" onSubmit={handleSubmit}>
+        <input
+          placeholder="数字员工名称"
+          required
+          value={name}
+          onChange={(event) => setName(event.target.value)}
+        />
+        <input
+          placeholder="模型"
+          required
+          value={model}
+          onChange={(event) => setModel(event.target.value)}
+        />
+        <input
+          placeholder="职责摘要"
+          required
+          value={summary}
+          onChange={(event) => setSummary(event.target.value)}
+        />
+        <select value={status} onChange={(event) => setStatus(event.target.value as "active" | "paused")}>
+          <option value="active">active</option>
+          <option value="paused">paused</option>
+        </select>
+        <button disabled={submitting} type="submit">
+          {submitting ? "创建中..." : "创建 Agent"}
+        </button>
+      </form>
       <div className="table">
         <div className="table-head">
           <span>名称</span>

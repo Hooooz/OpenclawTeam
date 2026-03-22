@@ -7,6 +7,13 @@ export type AgentRecord = {
   summary: string;
 };
 
+export type CreateAgentInput = {
+  name: string;
+  model: string;
+  summary: string;
+  status?: "active" | "paused";
+};
+
 export type SkillRecord = {
   id: string;
   name: string;
@@ -178,5 +185,22 @@ export function createDashboardSnapshot(): DashboardSnapshot {
     skills: seedSkills,
     runs: seedRuns,
     server: seedServerInfo
+  };
+}
+
+export function createAgentRecord(input: CreateAgentInput): AgentRecord {
+  const slug = input.name
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+
+  return {
+    id: `agent-${slug || Date.now()}`,
+    name: input.name.trim(),
+    status: input.status || "active",
+    model: input.model.trim(),
+    skillCount: 0,
+    summary: input.summary.trim()
   };
 }
