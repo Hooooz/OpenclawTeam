@@ -64,3 +64,14 @@
   - `POST /api/schedules/schedule-ops-daily-0900/trigger` returned a new run
   - `PATCH /api/runs/run-20260322102817` returned the updated `success` state
   - `GET /api/dashboard` now returns 6 runs with the latest result at the top
+- Added due-schedule sweep support in the current session:
+  - store supports `runDueSchedules(now?)`
+  - API exposes `POST /api/schedules/run-due`
+  - schedule page now has `执行到期计划`
+- Verified due-schedule sweep remotely:
+  - `POST /api/schedules/run-due` returned batch-created schedule runs
+  - `GET /api/dashboard` shows `nextRunAt` advancing to `2026-03-25`
+- Found and fixed a run ID collision bug during batch creation:
+  - root cause: run IDs only used second-level timestamps
+  - fix: millisecond precision plus random suffix
+  - legacy duplicate run IDs are normalized to unique values on store read/write

@@ -73,12 +73,32 @@ function normalizeAgents(agents: AgentRecord[]): AgentRecord[] {
   });
 }
 
+function normalizeRuns(runs: RunRecord[]): RunRecord[] {
+  const seenRunIds = new Map<string, number>();
+  const seenTraceIds = new Map<string, number>();
+
+  return runs.map((run) => {
+    const nextRunCount = (seenRunIds.get(run.id) || 0) + 1;
+    const nextTraceCount = (seenTraceIds.get(run.traceId) || 0) + 1;
+
+    seenRunIds.set(run.id, nextRunCount);
+    seenTraceIds.set(run.traceId, nextTraceCount);
+
+    return {
+      ...run,
+      id: nextRunCount === 1 ? run.id : `${run.id}-${nextRunCount}`,
+      traceId: nextTraceCount === 1 ? run.traceId : `${run.traceId}-${nextTraceCount}`
+    };
+  });
+}
+
 async function readStore(): Promise<ControlPlaneStore> {
   await ensureStoreFile();
   const raw = await readFile(dataFile, "utf8");
   const store = JSON.parse(raw) as ControlPlaneStore;
 
   store.agents = normalizeAgents(store.agents);
+  store.runs = normalizeRuns(store.runs);
   store.schedules = Array.isArray(store.schedules) ? store.schedules : seedSchedules;
 
   return store;
@@ -86,6 +106,7 @@ async function readStore(): Promise<ControlPlaneStore> {
 
 async function writeStore(store: ControlPlaneStore) {
   store.agents = normalizeAgents(store.agents);
+  store.runs = normalizeRuns(store.runs);
   await writeFile(dataFile, JSON.stringify(store, null, 2), "utf8");
 }
 
@@ -134,6 +155,20 @@ function buildFocus(): FocusItem[] {
       detail: "围绕 Docker Compose 形成首个稳定部署包。"
     }
   ];
+}
+
+function parseScheduleDateTime(value: string) {
+  const normalized = value.trim().replace(" ", "T");
+  const date = new Date(normalized);
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
+function formatScheduleDateTime(date: Date) {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(
+    date.getDate()
+  ).padStart(2, "0")} ${String(date.getHours()).padStart(2, "0")}:${String(
+    date.getMinutes()
+  ).padStart(2, "0")}`;
 }
 
 export async function getDashboardSnapshot(): Promise<DashboardSnapshot> {
@@ -357,4 +392,49 @@ export async function updateRunStatus(
   await writeStore(store);
 
   return run;
+}
+
+export async function runDueSchedules(now = formatScheduleDateTime(new Date())) {
+  const store = await readStore();
+  const nowDate = parseScheduleDateTime(now);
+
+  if (!nowDate) {
+    return { runs: [] as RunRecord[] };
+  }
+
+  const runs: RunRecord[] = [];
+
+  for (const schedule of store.schedules) {
+    if (schedule.status !== "active") {
+      continue;
+    }
+
+    const dueAt = parseScheduleDateTime(schedule.nextRunAt);
+    if (!dueAt || dueAt > nowDate) {
+      continue;
+    }
+
+    const agent = store.agents.find((item) => item.id === schedule.agentId);
+    if (!agent || agent.status === "paused") {
+      continue;
+    }
+
+    const run = createRunningRun(
+      agent.name,
+      "schedule",
+      `已由到期计划「${schedule.name}」批量触发，等待执行器接管。`
+    );
+
+    runs.push(run);
+    schedule.nextRunAt = formatScheduleDateTime(
+      new Date(dueAt.getTime() + 24 * 60 * 60 * 1000)
+    );
+  }
+
+  if (runs.length > 0) {
+    store.runs = [...runs, ...store.runs];
+    await writeStore(store);
+  }
+
+  return { runs };
 }

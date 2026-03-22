@@ -24,6 +24,7 @@ Evolve the documented internal OpenClaw digital-employee control plane into a wo
 | Deployment hardening | in_progress | Keep stabilizing Windows deployment automation and remove GitHub-sync friction |
 | Schedule management | complete | Schedule create and pause/resume are working in UI and API |
 | Run lifecycle control | complete | Schedule-triggered runs and manual status resolution are verified |
+| Due schedule sweep | complete | Due schedules can be batch-triggered and write back their next execution time |
 
 ## Key Decisions
 
@@ -39,6 +40,7 @@ Evolve the documented internal OpenClaw digital-employee control plane into a wo
 | Docker Desktop image-pull credentials on the server | open | Keep Node fallback as active path; return with concrete remediation steps later |
 | GitHub auth mode for server-side pull | open | Collect concrete options when deployment automation matures |
 | Local HTTPS push to GitHub is hanging in this session | open | Continue local commit discipline and direct server sync; come back with concrete auth remediation |
+| Cron semantics are still simplified in schedule sweep | open | Current MVP advances `nextRunAt` by one day; replace with real cron parsing later |
 
 ## Files In Scope
 
@@ -68,4 +70,5 @@ Evolve the documented internal OpenClaw digital-employee control plane into a wo
 - The latest completed milestone converted `Runs` from static display into an executable, durable control-plane flow.
 - The next completed milestone introduced `Schedules` as a first-class control-plane object with create and pause/resume flows.
 - The latest completed milestone lets control-plane operators trigger schedule runs and resolve run results from the UI/API.
+- The latest completed milestone adds a due-schedule sweep entry that batch-triggers active due plans.
 - The current follow-up focus is reducing operational friction around Windows deployment persistence and GitHub synchronization.

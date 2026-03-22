@@ -276,7 +276,8 @@ export function createRunRecord(input: {
   summary: string;
 }) {
   const now = new Date();
-  const timestamp = now.toISOString().replace(/[-:TZ.]/g, "").slice(0, 14);
+  const timestamp = now.toISOString().replace(/[-:TZ.]/g, "").slice(0, 17);
+  const uniqueSuffix = Math.random().toString(36).slice(2, 6);
   const startedAt = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(
     now.getDate()
   ).padStart(2, "0")} ${String(now.getHours()).padStart(2, "0")}:${String(
@@ -284,13 +285,13 @@ export function createRunRecord(input: {
   ).padStart(2, "0")}`;
 
   return {
-    id: `run-${timestamp}`,
+    id: `run-${timestamp}-${uniqueSuffix}`,
     agentName: input.agentName,
     triggerType: input.triggerType,
     status: input.status || "running",
     summary: input.summary,
     startedAt,
-    traceId: `trace-${timestamp.toLowerCase()}`
+    traceId: `trace-${timestamp.toLowerCase()}-${uniqueSuffix}`
   } satisfies RunRecord;
 }
 

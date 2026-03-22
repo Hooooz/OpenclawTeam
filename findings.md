@@ -77,3 +77,9 @@
   - `POST /api/schedules/:id/trigger` creates a `triggerType: schedule` run
   - a subsequent `PATCH /api/runs/:id` can resolve the run to `success` or `failed`
   - `GET /api/dashboard` now reflects the updated run list and run status changes
+- Due-schedule execution is now available via `POST /api/schedules/run-due`.
+- Current scheduler behavior is intentionally MVP-grade:
+  - due detection uses `nextRunAt <= now`
+  - after execution, `nextRunAt` is advanced by 1 day
+  - this is not a full cron parser yet, especially for weekday-only rules
+- The earlier duplicate batch-run IDs exposed a defect in `createRunRecord`; it is now fixed by using millisecond precision plus a random suffix, and legacy duplicate run IDs are normalized on store read/write.

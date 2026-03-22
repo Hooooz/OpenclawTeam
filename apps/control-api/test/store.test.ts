@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
@@ -190,6 +190,112 @@ test("updateRunStatus updates the target run status and summary", async () => {
     assert.equal(target?.status, "success");
     assert.equal(target?.summary, "巡检完成。");
     assert.equal(untouched?.status, "failed");
+  } finally {
+    delete process.env.CONTROL_PLANE_DATA_DIR;
+    await rm(tempDir, { recursive: true, force: true });
+  }
+});
+
+test("runDueSchedules creates runs for due active schedules and advances nextRunAt", async () => {
+  const { tempDir, store } = await loadStoreWithTempDir();
+
+  try {
+    const result = await store.runDueSchedules("2026-03-23 10:00");
+
+    assert.equal(result.runs.length, 1);
+    assert.equal(result.runs[0]?.triggerType, "schedule");
+    assert.equal(result.runs[0]?.agentName, "运营日报助手");
+
+    const schedules = await store.listSchedules();
+    const dueSchedule = schedules.find(
+      (item: { id: string }) => item.id === "schedule-ops-daily-0900"
+    );
+    const notDueSchedule = schedules.find(
+      (item: { id: string }) => item.id === "schedule-skill-audit-1400"
+    );
+
+    assert.equal(dueSchedule?.nextRunAt, "2026-03-24 09:00");
+    assert.equal(notDueSchedule?.nextRunAt, "2026-03-23 14:00");
+  } finally {
+    delete process.env.CONTROL_PLANE_DATA_DIR;
+    await rm(tempDir, { recursive: true, force: true });
+  }
+});
+
+test("runDueSchedules generates unique run ids for a batch", async () => {
+  const { tempDir, store } = await loadStoreWithTempDir();
+
+  try {
+    const created = await store.runDueSchedules("2026-03-24 10:00");
+    const ids = created.runs.map((run: { id: string }) => run.id);
+
+    assert.equal(created.runs.length, 2);
+    assert.equal(new Set(ids).size, ids.length);
+  } finally {
+    delete process.env.CONTROL_PLANE_DATA_DIR;
+    await rm(tempDir, { recursive: true, force: true });
+  }
+});
+
+test("runDueSchedules ignores paused schedules even if due", async () => {
+  const { tempDir, store } = await loadStoreWithTempDir();
+
+  try {
+    await store.updateScheduleStatus("schedule-ops-daily-0900", "paused");
+    const beforeRuns = await store.listRuns();
+    const result = await store.runDueSchedules("2026-03-23 10:00");
+
+    assert.equal(result.runs.length, 0);
+
+    const afterRuns = await store.listRuns();
+    assert.equal(afterRuns.length, beforeRuns.length);
+  } finally {
+    delete process.env.CONTROL_PLANE_DATA_DIR;
+    await rm(tempDir, { recursive: true, force: true });
+  }
+});
+
+test("listRuns normalizes duplicate persisted run ids", async () => {
+  const { tempDir, store } = await loadStoreWithTempDir();
+
+  try {
+    await store.listRuns();
+
+    const persisted = JSON.parse(
+      await readFile(path.join(tempDir, "control-plane.json"), "utf8")
+    ) as {
+      agents: unknown[];
+      skills: unknown[];
+      schedules: unknown[];
+      runs: Array<{ id: string; traceId: string }>;
+      server: unknown;
+    };
+
+    persisted.runs = [
+      {
+        ...persisted.runs[0],
+        id: "run-dup",
+        traceId: "trace-dup"
+      },
+      {
+        ...persisted.runs[1],
+        id: "run-dup",
+        traceId: "trace-dup"
+      }
+    ];
+
+    await writeFile(
+      path.join(tempDir, "control-plane.json"),
+      JSON.stringify(persisted, null, 2),
+      "utf8"
+    );
+
+    const runs = await store.listRuns();
+
+    assert.equal(runs.length, 2);
+    assert.equal(runs[0]?.id, "run-dup");
+    assert.equal(runs[1]?.id, "run-dup-2");
+    assert.equal(runs[1]?.traceId, "trace-dup-2");
   } finally {
     delete process.env.CONTROL_PLANE_DATA_DIR;
     await rm(tempDir, { recursive: true, force: true });
