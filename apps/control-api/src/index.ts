@@ -1,6 +1,6 @@
 import Fastify from "fastify";
 import cors from "@fastify/cors";
-import type { CreateAgentInput, CreateSkillInput } from "@openclaw/shared";
+import type { CreateAgentInput, CreateSkillInput, TriggerRunInput } from "@openclaw/shared";
 import {
   createAgent,
   createSkill,
@@ -9,6 +9,7 @@ import {
   listAgents,
   listRuns,
   listSkills,
+  startManualRun,
   updateAgentSkillBindings
 } from "./store.js";
 
@@ -94,6 +95,26 @@ app.post<{ Body: CreateSkillInput }>("/api/skills", async (request, reply) => {
     ok: true,
     skill
   });
+});
+
+app.post<{ Body: TriggerRunInput }>("/api/runs", async (request, reply) => {
+  const agentId = request.body?.agentId?.trim();
+
+  if (!agentId) {
+    return reply.status(400).send({
+      ok: false,
+      message: "agentId is required"
+    });
+  }
+
+  const result = await startManualRun(agentId);
+
+  if (!result.ok) {
+    const statusCode = result.code === "AGENT_NOT_FOUND" ? 404 : 409;
+    return reply.status(statusCode).send(result);
+  }
+
+  return reply.status(201).send(result);
 });
 
 app.setErrorHandler((error, _request, reply) => {

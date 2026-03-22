@@ -12,13 +12,19 @@
 - The server is Windows 11 Pro with PowerShell 5.1, about 15.85 GB RAM, Docker 29.2.0, Docker Compose v5.0.2, Node and npm available, Python available.
 - Git is installed on the server and available at `C:\\Program Files\\Git\\cmd\\git.exe`; machine PATH was updated so the host is ready for Git-based deployment flows.
 - The MVP scaffold was deployed successfully to the Windows server using the Node-process fallback path:
-- The MVP scaffold was deployed successfully to the Windows server using the Node-process fallback path:
   - Admin Web: `http://192.168.31.189:3000`
   - Control API health: `http://192.168.31.189:3001/health`
 - The persisted agent-creation slice is also verified remotely:
   - `POST /api/agents` returns 201-style success payload
   - `GET /api/dashboard` reflects the newly created agent count
 - Docker Compose on the server reaches the daemon but currently fails on image pull credentials, so Node fallback is the active deployment mode.
+- The user has now answered the previously collected non-blocking items:
+  - frontend stack: no preset requirement
+  - backend stack: no preset requirement
+  - deployment mode: Windows native deployment is accepted
+  - GitHub auth mode: to be decided later with concrete options
+  - Docker registry issue: user is ready to cooperate once exact remediation steps are known
+- Current functional gap: `Runs` page is still static display and there is no manual execution endpoint yet.
 
 ## Writing Constraints
 
@@ -45,3 +51,6 @@
   - Preferred: Docker Compose when Docker Desktop Linux engine and registry auth are healthy
   - Fallback: native Node processes managed by PowerShell scripts
 - The Windows Node fallback deploy script should proactively kill listeners on ports `3000` and `3001` before restart to avoid stale-process conflicts.
+- The next smallest useful slice is manual run triggering with a durable `RunRecord`, because it converts the control plane from pure configuration management into a real execution entry point.
+- `@openclaw/control-api` now has a lightweight built-in test entry based on `node:test` via `tsx --test`, which is enough to keep store-level runtime behavior under red-green control without introducing a heavyweight test framework yet.
+- Root `typecheck` now builds `@openclaw/shared` first, because the workspace consumers resolve shared types from `dist` under the current NodeNext setup.

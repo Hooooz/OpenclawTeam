@@ -32,6 +32,10 @@ export type CreateSkillInput = {
   status?: "active" | "draft";
 };
 
+export type TriggerRunInput = {
+  agentId: string;
+};
+
 export type RunRecord = {
   id: string;
   agentName: string;
@@ -41,6 +45,17 @@ export type RunRecord = {
   startedAt: string;
   traceId: string;
 };
+
+export type StartRunResult =
+  | {
+      ok: true;
+      run: RunRecord;
+    }
+  | {
+      ok: false;
+      code: "AGENT_NOT_FOUND" | "AGENT_PAUSED";
+      message: string;
+    };
 
 export type FocusItem = {
   title: string;
@@ -204,4 +219,29 @@ export function createSkillRecord(input: CreateSkillInput): SkillRecord {
     status: input.status || "draft",
     description: input.description.trim()
   };
+}
+
+export function createRunRecord(input: {
+  agentName: string;
+  triggerType: "manual" | "schedule";
+  status?: "success" | "failed" | "running";
+  summary: string;
+}) {
+  const now = new Date();
+  const timestamp = now.toISOString().replace(/[-:TZ.]/g, "").slice(0, 14);
+  const startedAt = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(
+    now.getDate()
+  ).padStart(2, "0")} ${String(now.getHours()).padStart(2, "0")}:${String(
+    now.getMinutes()
+  ).padStart(2, "0")}`;
+
+  return {
+    id: `run-${timestamp}`,
+    agentName: input.agentName,
+    triggerType: input.triggerType,
+    status: input.status || "running",
+    summary: input.summary,
+    startedAt,
+    traceId: `trace-${timestamp.toLowerCase()}`
+  } satisfies RunRecord;
 }

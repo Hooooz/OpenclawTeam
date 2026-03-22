@@ -24,3 +24,14 @@
   - Control API now writes control-plane data to `data/control-plane.json`
   - Admin web now supports create-agent form submission
   - Remote verification succeeded against the deployed server
+- Added Skill Registry create flow and Agent-Skill binding flow end to end in the local codebase, and pushed that slice to GitHub.
+- User filled in the non-blocking questions, which removed stack-selection ambiguity and confirmed Windows native deployment is acceptable.
+- Current session focus shifted to the next executable slice: manual run trigger and durable runtime records.
+- Added a red-green store test slice for manual runs:
+  - active agent trigger creates a persisted `running` record
+  - paused agent trigger is rejected without mutating run history
+- Implemented `POST /api/runs`, durable manual run creation in the store, and a Runs-page trigger entry in the admin web.
+- Verified locally in this session:
+  - `npm run test --workspace @openclaw/control-api`
+  - `npm run typecheck`
+  - `npm run build`

@@ -2,6 +2,7 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import {
   createAgentRecord,
+  createRunRecord,
   createSkillRecord,
   seedAgents,
   seedRuns,
@@ -13,6 +14,7 @@ import {
   type DashboardSnapshot,
   type FocusItem,
   type RunRecord,
+  type StartRunResult,
   type ServerInfo,
   type SkillRecord,
   type StatItem
@@ -25,7 +27,9 @@ type ControlPlaneStore = {
   server: ServerInfo;
 };
 
-const dataDir = path.resolve(process.cwd(), "data");
+const dataDir = process.env.CONTROL_PLANE_DATA_DIR?.trim()
+  ? path.resolve(process.env.CONTROL_PLANE_DATA_DIR)
+  : path.resolve(process.cwd(), "data");
 const dataFile = path.join(dataDir, "control-plane.json");
 
 const defaultStore: ControlPlaneStore = {
@@ -187,4 +191,40 @@ export async function updateAgentSkillBindings(agentId: string, skillIds: string
   await writeStore(store);
 
   return agent;
+}
+
+export async function startManualRun(agentId: string): Promise<StartRunResult> {
+  const store = await readStore();
+  const agent = store.agents.find((item) => item.id === agentId);
+
+  if (!agent) {
+    return {
+      ok: false,
+      code: "AGENT_NOT_FOUND",
+      message: "Agent not found"
+    };
+  }
+
+  if (agent.status === "paused") {
+    return {
+      ok: false,
+      code: "AGENT_PAUSED",
+      message: "Agent is paused"
+    };
+  }
+
+  const run = createRunRecord({
+    agentName: agent.name,
+    triggerType: "manual",
+    status: "running",
+    summary: "已从控制台手动触发，等待执行器接管。"
+  });
+
+  store.runs = [run, ...store.runs];
+  await writeStore(store);
+
+  return {
+    ok: true,
+    run
+  };
 }

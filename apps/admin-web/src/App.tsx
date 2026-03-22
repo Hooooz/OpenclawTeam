@@ -12,6 +12,7 @@ import {
   createAgent as createAgentRequest,
   createSkill as createSkillRequest,
   fetchDashboardSnapshot,
+  triggerRun as triggerRunRequest,
   updateAgentSkillBindings as updateAgentSkillBindingsRequest
 } from "./api";
 
@@ -68,6 +69,11 @@ export function App() {
 
   async function handleUpdateAgentSkills(agentId: string, skillIds: string[]) {
     await updateAgentSkillBindingsRequest(agentId, skillIds);
+    await loadSnapshot();
+  }
+
+  async function handleTriggerRun(agentId: string) {
+    await triggerRunRequest({ agentId });
     await loadSnapshot();
   }
 
@@ -140,7 +146,16 @@ export function App() {
                 />
               }
             />
-            <Route path="/runs" element={<RunsPage runs={state.data.runs} />} />
+            <Route
+              path="/runs"
+              element={
+                <RunsPage
+                  agents={state.data.agents}
+                  onTriggerRun={handleTriggerRun}
+                  runs={state.data.runs}
+                />
+              }
+            />
             <Route path="/deploy" element={<DeployPage snapshot={state.data} />} />
           </Routes>
         )}
@@ -157,6 +172,7 @@ function DashboardPage({ snapshot }: { snapshot: DashboardSnapshot }) {
         <h2>把 OpenClaw 收敛成一个能运营的内部系统</h2>
         <p className="muted">
           当前主线已经进入可写阶段：数字员工、Skills 与绑定关系都可以进后台。
+          当前开始补执行入口，先从手动触发和运行记录闭环做起。
         </p>
       </section>
 
@@ -422,7 +438,27 @@ function SkillsPage({
   );
 }
 
-function RunsPage({ runs }: { runs: RunRecord[] }) {
+function RunsPage({
+  agents,
+  onTriggerRun,
+  runs
+}: {
+  agents: AgentRecord[];
+  onTriggerRun: (agentId: string) => Promise<void>;
+  runs: RunRecord[];
+}) {
+  const [triggeringAgentId, setTriggeringAgentId] = useState<string | null>(null);
+
+  async function handleTrigger(agentId: string) {
+    setTriggeringAgentId(agentId);
+
+    try {
+      await onTriggerRun(agentId);
+    } finally {
+      setTriggeringAgentId(null);
+    }
+  }
+
   return (
     <section className="panel">
       <div className="panel-header">
@@ -430,6 +466,28 @@ function RunsPage({ runs }: { runs: RunRecord[] }) {
           <p className="eyebrow">Runtime</p>
           <h3>运行记录</h3>
         </div>
+      </div>
+      <div className="card-grid">
+        {agents.map((agent) => (
+          <article className="mini-card" key={agent.id}>
+            <div className="mini-card-top">
+              <strong>{agent.name}</strong>
+              <span className="badge badge-outline">{agent.status}</span>
+            </div>
+            <p className="muted">{agent.summary}</p>
+            <div className="mini-card-meta">
+              <span>{agent.model}</span>
+              <span>{agent.skillCount} skills</span>
+            </div>
+            <button
+              disabled={agent.status !== "active" || triggeringAgentId === agent.id}
+              onClick={() => void handleTrigger(agent.id)}
+              type="button"
+            >
+              {triggeringAgentId === agent.id ? "触发中..." : "手动触发"}
+            </button>
+          </article>
+        ))}
       </div>
       <div className="timeline">
         {runs.map((run) => (

@@ -1,7 +1,8 @@
 import type {
   CreateAgentInput,
   CreateSkillInput,
-  DashboardSnapshot
+  DashboardSnapshot,
+  TriggerRunInput
 } from "@openclaw/shared";
 
 const API_BASE_URL =
@@ -60,6 +61,22 @@ export async function updateAgentSkillBindings(agentId: string, skillIds: string
 
   if (!response.ok) {
     throw new Error(`Update agent skills failed with status ${response.status}`);
+  }
+
+  return response.json() as Promise<{ ok: true }>;
+}
+
+export async function triggerRun(input: TriggerRunInput) {
+  const response = await fetch(`${API_BASE_URL}/api/runs`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify(input)
+  });
+
+  if (!response.ok) {
+    throw new Error(`Trigger run failed with status ${response.status}`);
   }
 
   return response.json() as Promise<{ ok: true }>;

@@ -2,38 +2,39 @@
 
 ## Goal
 
-Complete the enterprise OpenClaw documentation package as three Feishu-style markdown documents based on the existing outline, then do a single completion report to the user.
+Evolve the documented internal OpenClaw digital-employee control plane into a working MVP that can be deployed to the Windows server, with admin CRUD, runtime triggers, and durable records.
 
 ## Deliverables
 
-1. `产品背景与框架.md`
-2. `技术方案与开发清单.md`
-3. `阶段性总结与测试用例草案.md`
-4. Updated `大纲.md` retained as control outline
+1. Updated spec and planning documents aligned to the internal control-plane scope
+2. Runnable monorepo with admin web, control API, and shared types
+3. Windows deployment scripts and verified server rollout
+4. Incremental runtime features with verification evidence
 
 ## Phases
 
 | Phase | Status | Notes |
 |---|---|---|
-| Planning files setup | complete | Planning files created and scope recorded |
-| Draft document 1 | complete | `产品背景与框架.md` created |
-| Draft document 2 | complete | `技术方案与开发清单.md` created |
-| Draft document 3 | complete | `阶段性总结与测试用例草案.md` created |
-| Final review | complete | Cross-checked structure, terminology, and completeness |
+| Documentation package | complete | Three main documents and control outline aligned to internal product direction |
+| Environment baseline | complete | GitHub repo, server access, and Windows deployment path established |
+| MVP scaffold | complete | Admin web, control API, shared package, and deploy scripts are in repo and deployed |
+| Object management | complete | Agent create, Skill create, and Agent-Skill binding are working |
+| Runtime execution loop | in_progress | Add manual run trigger, durable run records, and UI execution entry |
+| Deployment verification | pending | Redeploy latest slice and verify the runtime flow on `192.168.31.189` |
 
 ## Key Decisions
 
-- Audience is the internal development team, not external enterprise customers.
-- Do not explain basic OpenClaw concepts.
-- Documents should be directly usable in Feishu docs format.
-- Focus on enterprise application design, technical landing path, and staged execution.
+- Product is an internal digital-employee management backend for the team itself, not an external SaaS.
+- The first production baseline targets the existing Windows 11 host and accepts native Node deployment.
+- Docker Compose remains preferred long term, but Docker registry auth issues are currently non-blocking.
+- User prefers non-blocking questions to be collected instead of interrupting implementation flow.
 
 ## Risks / Open Items
 
 | Item | Status | Action |
 |---|---|---|
-| Exact deployment topology is not fully specified | open | Use a practical standard enterprise deployment model |
-| Some technical nodes are exploratory by nature | open | Mark them as research tasks in document 2 |
+| Docker Desktop image-pull credentials on the server | open | Keep Node fallback as active path; return with concrete remediation steps later |
+| GitHub auth mode for server-side pull | open | Collect concrete options when deployment automation matures |
 
 ## Files In Scope
 
@@ -41,19 +42,19 @@ Complete the enterprise OpenClaw documentation package as three Feishu-style mar
 - `产品背景与框架.md`
 - `技术方案与开发清单.md`
 - `阶段性总结与测试用例草案.md`
+- `待确认问题.md`
 - `task_plan.md`
 - `findings.md`
 - `progress.md`
+- `apps/admin-web/src/App.tsx`
+- `apps/admin-web/src/api.ts`
+- `apps/control-api/src/index.ts`
+- `apps/control-api/src/store.ts`
+- `packages/shared/src/index.ts`
+- `infra/scripts/windows/deploy-node.ps1`
 
 ## Completion Notes
 
-- Completed the full three-document package in markdown form for Feishu use.
-- Preserved `大纲.md` as the control outline for later continuation.
-- Documents are internally consistent around scenario, connector, governance, and staged-delivery terminology.
-- Implemented the first runnable monorepo scaffold:
-  - `apps/admin-web`
-  - `apps/control-api`
-  - `packages/shared`
-  - `infra/compose`
-  - `infra/scripts/windows/deploy.ps1`
-- Verified local build and typecheck for the scaffold.
+- The documentation phase is closed; this file now tracks engineering delivery.
+- Current implementation baseline is a monorepo deployed to the Windows server with Node-process fallback.
+- The next meaningful milestone is converting `Runs` from static display to an executable, durable control-plane flow.
