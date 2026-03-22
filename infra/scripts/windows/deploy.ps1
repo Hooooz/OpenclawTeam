@@ -17,7 +17,7 @@ if (-not (Test-Path $InstallDir)) {
 
 Set-Location $InstallDir
 
-if (-not (Test-Path ".env")) {
+if ((-not (Test-Path ".env")) -and (Test-Path ".env.example")) {
   Copy-Item ".env.example" ".env"
 }
 
