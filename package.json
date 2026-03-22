@@ -1,0 +1,18 @@
+{
+  "name": "openclaw-team",
+  "private": true,
+  "version": "0.1.0",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev:web": "npm run dev --workspace @openclaw/admin-web",
+    "dev:api": "npm run dev --workspace @openclaw/control-api",
+    "build:shared": "npm run build --workspace @openclaw/shared",
+    "build:api": "npm run build --workspace @openclaw/control-api",
+    "build:web": "npm run build --workspace @openclaw/admin-web",
+    "build": "npm run build:shared && npm run build:api && npm run build:web",
+    "typecheck": "npm run typecheck --workspace @openclaw/shared && npm run typecheck --workspace @openclaw/control-api && npm run typecheck --workspace @openclaw/admin-web"
+  }
+}

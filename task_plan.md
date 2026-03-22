@@ -50,3 +50,10 @@ Complete the enterprise OpenClaw documentation package as three Feishu-style mar
 - Completed the full three-document package in markdown form for Feishu use.
 - Preserved `大纲.md` as the control outline for later continuation.
 - Documents are internally consistent around scenario, connector, governance, and staged-delivery terminology.
+- Implemented the first runnable monorepo scaffold:
+  - `apps/admin-web`
+  - `apps/control-api`
+  - `packages/shared`
+  - `infra/compose`
+  - `infra/scripts/windows/deploy.ps1`
+- Verified local build and typecheck for the scaffold.

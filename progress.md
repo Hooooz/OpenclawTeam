@@ -14,3 +14,5 @@
 - Verified direct SSH login to `Administrator@192.168.31.189`.
 - Confirmed server baseline: Windows 11 Pro, PowerShell 5.1, Docker and Docker Compose available.
 - Installed / exposed Git on the server and updated machine PATH for future deployment use.
+- Created the MVP monorepo scaffold with admin web, control API, shared package, Docker Compose baseline, and Windows deploy script.
+- Verified `npm run build` and `npm run typecheck` pass locally.
