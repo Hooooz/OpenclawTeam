@@ -18,6 +18,7 @@ import {
   type FocusItem,
   type RunRecord,
   type ScheduleRecord,
+  type SchedulerStatus,
   type StartRunResult,
   type ServerInfo,
   type SkillRecord,
@@ -36,6 +37,7 @@ const dataDir = process.env.CONTROL_PLANE_DATA_DIR?.trim()
   ? path.resolve(process.env.CONTROL_PLANE_DATA_DIR)
   : path.resolve(process.cwd(), "data");
 const dataFile = path.join(dataDir, "control-plane.json");
+const schedulerHeartbeatFile = path.join(dataDir, "schedule-sweep-heartbeat.json");
 
 const defaultStore: ControlPlaneStore = {
   agents: seedAgents,
@@ -171,8 +173,116 @@ function formatScheduleDateTime(date: Date) {
   ).padStart(2, "0")}`;
 }
 
+function parseCronField(field: string, min: number, max: number) {
+  const values = new Set<number>();
+
+  for (const part of field.split(",")) {
+    const token = part.trim();
+
+    if (!token) {
+      continue;
+    }
+
+    if (token === "*") {
+      for (let value = min; value <= max; value += 1) {
+        values.add(value);
+      }
+      continue;
+    }
+
+    if (/^\d+$/.test(token)) {
+      const value = Number(token);
+      if (value >= min && value <= max) {
+        values.add(value);
+      }
+      continue;
+    }
+
+    const rangeMatch = token.match(/^(\d+)-(\d+)$/);
+    if (!rangeMatch) {
+      continue;
+    }
+
+    const start = Number(rangeMatch[1]);
+    const end = Number(rangeMatch[2]);
+    for (let value = start; value <= end; value += 1) {
+      if (value >= min && value <= max) {
+        values.add(value);
+      }
+    }
+  }
+
+  return values;
+}
+
+function computeNextRunAt(cron: string, from: Date) {
+  const parts = cron.trim().split(/\s+/);
+  if (parts.length !== 5) {
+    return new Date(from.getTime() + 24 * 60 * 60 * 1000);
+  }
+
+  const [minuteField, hourField, _dayOfMonthField, _monthField, dayOfWeekField] = parts;
+  const allowedMinutes = parseCronField(minuteField, 0, 59);
+  const allowedHours = parseCronField(hourField, 0, 23);
+  const allowedDaysOfWeek = parseCronField(dayOfWeekField, 0, 6);
+
+  const cursor = new Date(from.getTime());
+  cursor.setSeconds(0, 0);
+  cursor.setMinutes(cursor.getMinutes() + 1);
+
+  for (let step = 0; step < 60 * 24 * 370; step += 1) {
+    const minuteMatches = allowedMinutes.size === 0 || allowedMinutes.has(cursor.getMinutes());
+    const hourMatches = allowedHours.size === 0 || allowedHours.has(cursor.getHours());
+    const dayMatches =
+      allowedDaysOfWeek.size === 0 || allowedDaysOfWeek.has(cursor.getDay());
+
+    if (minuteMatches && hourMatches && dayMatches) {
+      return cursor;
+    }
+
+    cursor.setMinutes(cursor.getMinutes() + 1);
+  }
+
+  return new Date(from.getTime() + 24 * 60 * 60 * 1000);
+}
+
+function resolveScheduleNextRunAt(input: CreateScheduleInput) {
+  if (input.nextRunAt?.trim()) {
+    return input.nextRunAt.trim();
+  }
+
+  return formatScheduleDateTime(computeNextRunAt(input.cron, new Date()));
+}
+
+async function readSchedulerStatus(): Promise<SchedulerStatus> {
+  try {
+    const raw = await readFile(schedulerHeartbeatFile, "utf8");
+    const heartbeat = JSON.parse(raw.replace(/^\uFEFF/, "")) as Partial<SchedulerStatus>;
+
+    return {
+      taskName: heartbeat.taskName?.trim() || "OpenclawScheduleSweep",
+      endpoint: heartbeat.endpoint?.trim() || "http://localhost:3001/api/schedules/run-due",
+      lastHeartbeatAt: heartbeat.lastHeartbeatAt?.trim() || null,
+      lastOutcome:
+        heartbeat.lastOutcome === "success" || heartbeat.lastOutcome === "failed"
+          ? heartbeat.lastOutcome
+          : "never",
+      lastMessage: heartbeat.lastMessage?.trim() || "尚未收到调度守护心跳。"
+    };
+  } catch {
+    return {
+      taskName: "OpenclawScheduleSweep",
+      endpoint: "http://localhost:3001/api/schedules/run-due",
+      lastHeartbeatAt: null,
+      lastOutcome: "never",
+      lastMessage: "尚未收到调度守护心跳。"
+    };
+  }
+}
+
 export async function getDashboardSnapshot(): Promise<DashboardSnapshot> {
   const store = await readStore();
+  const scheduler = await readSchedulerStatus();
 
   return {
     stats: buildStats(store),
@@ -181,7 +291,8 @@ export async function getDashboardSnapshot(): Promise<DashboardSnapshot> {
     skills: store.skills,
     schedules: store.schedules,
     runs: store.runs,
-    server: store.server
+    server: store.server,
+    scheduler
   };
 }
 
@@ -235,6 +346,7 @@ export async function createSchedule(input: CreateScheduleInput) {
 
   const schedule = createScheduleRecord({
     ...input,
+    nextRunAt: resolveScheduleNextRunAt(input),
     agentName: agent.name
   });
 
@@ -426,9 +538,7 @@ export async function runDueSchedules(now = formatScheduleDateTime(new Date())) 
     );
 
     runs.push(run);
-    schedule.nextRunAt = formatScheduleDateTime(
-      new Date(dueAt.getTime() + 24 * 60 * 60 * 1000)
-    );
+    schedule.nextRunAt = formatScheduleDateTime(computeNextRunAt(schedule.cron, dueAt));
   }
 
   if (runs.length > 0) {

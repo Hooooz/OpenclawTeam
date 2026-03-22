@@ -16,6 +16,7 @@ import {
   listRuns,
   listSchedules,
   listSkills,
+  runDueSchedules,
   startManualRun,
   triggerScheduleRun,
   updateRunStatus,
@@ -115,12 +116,11 @@ app.post<{ Body: CreateScheduleInput }>("/api/schedules", async (request, reply)
     !body?.name?.trim() ||
     !body?.agentId?.trim() ||
     !body?.cron?.trim() ||
-    !body?.nextRunAt?.trim() ||
     !body?.summary?.trim()
   ) {
     return reply.status(400).send({
       ok: false,
-      message: "name, agentId, cron, nextRunAt, and summary are required"
+      message: "name, agentId, cron, and summary are required"
     });
   }
 
@@ -186,6 +186,15 @@ app.post<{ Params: { scheduleId: string } }>(
     return reply.status(201).send(result);
   }
 );
+
+app.post<{ Body: { now?: string } }>("/api/schedules/run-due", async (request, reply) => {
+  const result = await runDueSchedules(request.body?.now);
+
+  return reply.send({
+    ok: true,
+    runs: result.runs
+  });
+});
 
 app.post<{ Body: TriggerRunInput }>("/api/runs", async (request, reply) => {
   const agentId = request.body?.agentId?.trim();

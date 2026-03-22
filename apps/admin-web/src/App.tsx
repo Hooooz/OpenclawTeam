@@ -15,6 +15,7 @@ import {
   createSchedule as createScheduleRequest,
   createSkill as createSkillRequest,
   fetchDashboardSnapshot,
+  runDueSchedules as runDueSchedulesRequest,
   triggerScheduleRun as triggerScheduleRunRequest,
   triggerRun as triggerRunRequest,
   updateRunStatus as updateRunStatusRequest,
@@ -89,6 +90,11 @@ export function App() {
 
   async function handleTriggerScheduleRun(scheduleId: string) {
     await triggerScheduleRunRequest(scheduleId);
+    await loadSnapshot();
+  }
+
+  async function handleRunDueSchedules() {
+    await runDueSchedulesRequest();
     await loadSnapshot();
   }
 
@@ -186,6 +192,7 @@ export function App() {
                 <SchedulesPage
                   agents={state.data.agents}
                   onCreateSchedule={handleCreateSchedule}
+                  onRunDueSchedules={handleRunDueSchedules}
                   onTriggerScheduleRun={handleTriggerScheduleRun}
                   onUpdateScheduleStatus={handleUpdateScheduleStatus}
                   schedules={state.data.schedules}
@@ -249,6 +256,28 @@ function DashboardPage({ snapshot }: { snapshot: DashboardSnapshot }) {
           ))}
         </ul>
       </section>
+
+      <section className="panel">
+        <div className="panel-header">
+          <div>
+            <p className="eyebrow">Scheduler</p>
+            <h3>自动调度守护</h3>
+          </div>
+          <span
+            className={`badge ${
+              snapshot.scheduler.lastOutcome === "failed" ? "badge-danger" : ""
+            }`}
+          >
+            {snapshot.scheduler.lastOutcome}
+          </span>
+        </div>
+        <div className="mini-card-meta">
+          <span>{snapshot.scheduler.taskName}</span>
+          <span>{snapshot.scheduler.endpoint}</span>
+          <span>{snapshot.scheduler.lastHeartbeatAt || "暂无心跳"}</span>
+        </div>
+        <p className="muted">{snapshot.scheduler.lastMessage}</p>
+      </section>
     </div>
   );
 }
@@ -256,12 +285,14 @@ function DashboardPage({ snapshot }: { snapshot: DashboardSnapshot }) {
 function SchedulesPage({
   agents,
   onCreateSchedule,
+  onRunDueSchedules,
   onTriggerScheduleRun,
   onUpdateScheduleStatus,
   schedules
 }: {
   agents: AgentRecord[];
   onCreateSchedule: (input: CreateScheduleInput) => Promise<void>;
+  onRunDueSchedules: () => Promise<void>;
   onTriggerScheduleRun: (scheduleId: string) => Promise<void>;
   onUpdateScheduleStatus: (
     scheduleId: string,
@@ -272,22 +303,21 @@ function SchedulesPage({
   const [name, setName] = useState("");
   const [agentId, setAgentId] = useState(agents[0]?.id || "");
   const [cron, setCron] = useState("0 9 * * *");
-  const [nextRunAt, setNextRunAt] = useState("2026-03-23 09:00");
   const [summary, setSummary] = useState("");
   const [status, setStatus] = useState<"active" | "paused">("active");
   const [submitting, setSubmitting] = useState(false);
   const [savingScheduleId, setSavingScheduleId] = useState<string | null>(null);
   const [triggeringScheduleId, setTriggeringScheduleId] = useState<string | null>(null);
+  const [runningDue, setRunningDue] = useState(false);
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setSubmitting(true);
 
     try {
-      await onCreateSchedule({ name, agentId, cron, nextRunAt, summary, status });
+      await onCreateSchedule({ name, agentId, cron, summary, status });
       setName("");
       setCron("0 9 * * *");
-      setNextRunAt("2026-03-23 09:00");
       setSummary("");
       setStatus("active");
     } finally {
@@ -318,6 +348,16 @@ function SchedulesPage({
     }
   }
 
+  async function handleRunDue() {
+    setRunningDue(true);
+
+    try {
+      await onRunDueSchedules();
+    } finally {
+      setRunningDue(false);
+    }
+  }
+
   return (
     <section className="panel">
       <div className="panel-header">
@@ -325,7 +365,12 @@ function SchedulesPage({
           <p className="eyebrow">Schedule</p>
           <h3>调度计划</h3>
         </div>
-        <span className="badge">{schedules.length} 条计划</span>
+        <div className="inline-actions">
+          <span className="badge">{schedules.length} 条计划</span>
+          <button disabled={runningDue} onClick={() => void handleRunDue()} type="button">
+            {runningDue ? "执行中..." : "执行到期计划"}
+          </button>
+        </div>
       </div>
 
       <form className="schedule-form" onSubmit={handleSubmit}>
@@ -347,12 +392,6 @@ function SchedulesPage({
           required
           value={cron}
           onChange={(event) => setCron(event.target.value)}
-        />
-        <input
-          placeholder="下次执行时间"
-          required
-          value={nextRunAt}
-          onChange={(event) => setNextRunAt(event.target.value)}
         />
         <input
           placeholder="摘要"
@@ -787,6 +826,14 @@ function DeployPage({ snapshot }: { snapshot: DashboardSnapshot }) {
         <article className="mini-card">
           <strong>GitHub 仓库</strong>
           <p className="muted">{snapshot.server.repository}</p>
+        </article>
+        <article className="mini-card">
+          <strong>调度守护</strong>
+          <p className="muted">{snapshot.scheduler.taskName}</p>
+          <div className="mini-card-meta">
+            <span>{snapshot.scheduler.lastOutcome}</span>
+            <span>{snapshot.scheduler.lastHeartbeatAt || "暂无心跳"}</span>
+          </div>
         </article>
       </div>
     </section>

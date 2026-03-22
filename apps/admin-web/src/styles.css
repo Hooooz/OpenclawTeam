@@ -167,6 +167,23 @@ a {
   gap: 12px;
 }
 
+.inline-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.inline-actions button {
+  min-height: 40px;
+  border: 1px solid rgba(28, 36, 48, 0.12);
+  border-radius: 12px;
+  padding: 0 14px;
+  background: #17324a;
+  color: #fff8f0;
+  font: inherit;
+  cursor: pointer;
+}
+
 .agent-form {
   display: grid;
   gap: 12px;
@@ -184,7 +201,7 @@ a {
 .schedule-form {
   display: grid;
   gap: 12px;
-  grid-template-columns: repeat(7, minmax(0, 1fr));
+  grid-template-columns: repeat(6, minmax(0, 1fr));
   margin-bottom: 20px;
 }
 

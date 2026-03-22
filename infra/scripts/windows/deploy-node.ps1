@@ -10,6 +10,7 @@ $runtimeDir = Join-Path $InstallDir ".runtime"
 $logDir = Join-Path $InstallDir "logs"
 $apiTaskName = "OpenclawControlApi"
 $webTaskName = "OpenclawAdminWeb"
+$scheduleSweepTaskName = "OpenclawScheduleSweep"
 $windowsScriptDir = Join-Path $InstallDir "infra\scripts\windows"
 
 New-Item -ItemType Directory -Force -Path $runtimeDir | Out-Null
@@ -65,16 +66,18 @@ function Remove-ManagedTask {
 function Register-ManagedTask {
   param(
     [string]$TaskName,
-    [string]$TaskCommand
+    [string]$TaskCommand,
+    [string]$Schedule = "ONSTART",
+    [string]$Modifier
   )
 
   Remove-ManagedTask $TaskName
-  Invoke-ScheduledTaskCommand @(
+  $arguments = @(
     "/Create",
     "/TN",
     $TaskName,
     "/SC",
-    "ONSTART",
+    $Schedule,
     "/RU",
     "SYSTEM",
     "/RL",
@@ -83,7 +86,16 @@ function Register-ManagedTask {
     $TaskCommand,
     "/F"
   )
-  Invoke-ScheduledTaskCommand @("/Run", "/TN", $TaskName)
+
+  if ($Modifier) {
+    $arguments += @("/MO", $Modifier)
+  }
+
+  Invoke-ScheduledTaskCommand $arguments
+
+  if ($Schedule -eq "ONSTART") {
+    Invoke-ScheduledTaskCommand @("/Run", "/TN", $TaskName)
+  }
 }
 
 Stop-ManagedProcess (Join-Path $runtimeDir "control-api.pid")
@@ -96,20 +108,25 @@ npm run build
 
 $apiLaunchScript = Join-Path $windowsScriptDir "start-control-api.ps1"
 $webLaunchScript = Join-Path $windowsScriptDir "start-admin-web.ps1"
+$scheduleSweepScript = Join-Path $windowsScriptDir "start-schedule-sweep.ps1"
 
 $apiTaskCommand = "powershell.exe -NoProfile -ExecutionPolicy Bypass -File ""$apiLaunchScript"""
 $webTaskCommand = "powershell.exe -NoProfile -ExecutionPolicy Bypass -File ""$webLaunchScript"""
+$scheduleSweepCommand = "powershell.exe -NoProfile -ExecutionPolicy Bypass -File ""$scheduleSweepScript"""
 
 Register-ManagedTask -TaskName $apiTaskName -TaskCommand $apiTaskCommand
 Register-ManagedTask -TaskName $webTaskName -TaskCommand $webTaskCommand
+Register-ManagedTask -TaskName $scheduleSweepTaskName -TaskCommand $scheduleSweepCommand -Schedule "MINUTE" -Modifier "5"
 
 $apiTaskName | Set-Content (Join-Path $runtimeDir "control-api.task")
 $webTaskName | Set-Content (Join-Path $runtimeDir "admin-web.task")
+$scheduleSweepTaskName | Set-Content (Join-Path $runtimeDir "schedule-sweep.task")
 
 Start-Sleep -Seconds 8
 
 Write-Output "Control API task: $apiTaskName"
 Write-Output "Admin Web task: $webTaskName"
+Write-Output "Schedule sweep task: $scheduleSweepTaskName"
 
 try {
   $apiHealth = Invoke-WebRequest -UseBasicParsing -Uri "http://localhost:3001/health" -TimeoutSec 5

@@ -104,6 +104,38 @@ test("createSchedule persists a schedule with the bound agent name", async () =>
   }
 });
 
+test("createSchedule computes nextRunAt from cron when it is omitted", async () => {
+  const { tempDir, store } = await loadStoreWithTempDir();
+  const RealDate = Date;
+
+  try {
+    const fakeNow = new RealDate("2026-03-22T08:10:00");
+
+    global.Date = class extends RealDate {
+      constructor(value?: string | number | Date) {
+        super(value ?? fakeNow);
+      }
+
+      static now() {
+        return fakeNow.getTime();
+      }
+    } as DateConstructor;
+
+    const schedule = await store.createSchedule({
+      name: "晨间自动日报",
+      agentId: "agent-ops-daily",
+      cron: "0 9 * * *",
+      summary: "自动计算下一次执行时间。"
+    });
+
+    assert.equal(schedule?.nextRunAt, "2026-03-22 09:00");
+  } finally {
+    global.Date = RealDate;
+    delete process.env.CONTROL_PLANE_DATA_DIR;
+    await rm(tempDir, { recursive: true, force: true });
+  }
+});
+
 test("updateScheduleStatus changes only the target schedule status", async () => {
   const { tempDir, store } = await loadStoreWithTempDir();
 
@@ -255,6 +287,54 @@ test("runDueSchedules ignores paused schedules even if due", async () => {
   }
 });
 
+test("runDueSchedules advances weekday cron to the next matching business day", async () => {
+  const { tempDir, store } = await loadStoreWithTempDir();
+
+  try {
+    await store.listSchedules();
+
+    const persisted = JSON.parse(
+      await readFile(path.join(tempDir, "control-plane.json"), "utf8")
+    ) as {
+      agents: unknown[];
+      skills: unknown[];
+      schedules: Array<{ id: string; nextRunAt: string; cron: string; status: string }>;
+      runs: unknown[];
+      server: unknown;
+    };
+
+    const target = persisted.schedules.find((item) => item.id === "schedule-skill-audit-1400");
+    const other = persisted.schedules.find((item) => item.id === "schedule-ops-daily-0900");
+    if (!target) {
+      throw new Error("expected seeded schedule");
+    }
+    if (!other) {
+      throw new Error("expected seeded schedule");
+    }
+
+    target.nextRunAt = "2026-03-27 14:00";
+    target.cron = "0 14 * * 1-5";
+    target.status = "active";
+    other.nextRunAt = "2026-03-30 09:00";
+
+    await writeFile(
+      path.join(tempDir, "control-plane.json"),
+      JSON.stringify(persisted, null, 2),
+      "utf8"
+    );
+
+    const result = await store.runDueSchedules("2026-03-27 15:00");
+    const schedules = await store.listSchedules();
+    const updated = schedules.find((item: { id: string }) => item.id === "schedule-skill-audit-1400");
+
+    assert.equal(result.runs.length, 1);
+    assert.equal(updated?.nextRunAt, "2026-03-30 14:00");
+  } finally {
+    delete process.env.CONTROL_PLANE_DATA_DIR;
+    await rm(tempDir, { recursive: true, force: true });
+  }
+});
+
 test("listRuns normalizes duplicate persisted run ids", async () => {
   const { tempDir, store } = await loadStoreWithTempDir();
 
@@ -296,6 +376,78 @@ test("listRuns normalizes duplicate persisted run ids", async () => {
     assert.equal(runs[0]?.id, "run-dup");
     assert.equal(runs[1]?.id, "run-dup-2");
     assert.equal(runs[1]?.traceId, "trace-dup-2");
+  } finally {
+    delete process.env.CONTROL_PLANE_DATA_DIR;
+    await rm(tempDir, { recursive: true, force: true });
+  }
+});
+
+test("getDashboardSnapshot returns default scheduler status when heartbeat is missing", async () => {
+  const { tempDir, store } = await loadStoreWithTempDir();
+
+  try {
+    const snapshot = await store.getDashboardSnapshot();
+
+    assert.equal(snapshot.scheduler.taskName, "OpenclawScheduleSweep");
+    assert.equal(snapshot.scheduler.lastHeartbeatAt, null);
+    assert.equal(snapshot.scheduler.lastOutcome, "never");
+  } finally {
+    delete process.env.CONTROL_PLANE_DATA_DIR;
+    await rm(tempDir, { recursive: true, force: true });
+  }
+});
+
+test("getDashboardSnapshot reads persisted scheduler heartbeat", async () => {
+  const { tempDir, store } = await loadStoreWithTempDir();
+
+  try {
+    await writeFile(
+      path.join(tempDir, "schedule-sweep-heartbeat.json"),
+      JSON.stringify(
+        {
+          taskName: "OpenclawScheduleSweep",
+          endpoint: "http://localhost:3001/api/schedules/run-due",
+          lastHeartbeatAt: "2026-03-22 12:45:00",
+          lastOutcome: "success",
+          lastMessage: "sweep ok"
+        },
+        null,
+        2
+      ),
+      "utf8"
+    );
+
+    const snapshot = await store.getDashboardSnapshot();
+
+    assert.equal(snapshot.scheduler.lastHeartbeatAt, "2026-03-22 12:45:00");
+    assert.equal(snapshot.scheduler.lastOutcome, "success");
+    assert.equal(snapshot.scheduler.lastMessage, "sweep ok");
+  } finally {
+    delete process.env.CONTROL_PLANE_DATA_DIR;
+    await rm(tempDir, { recursive: true, force: true });
+  }
+});
+
+test("getDashboardSnapshot reads scheduler heartbeat written with utf8 bom", async () => {
+  const { tempDir, store } = await loadStoreWithTempDir();
+
+  try {
+    await writeFile(
+      path.join(tempDir, "schedule-sweep-heartbeat.json"),
+      `\uFEFF${JSON.stringify({
+        taskName: "OpenclawScheduleSweep",
+        endpoint: "http://localhost:3001/api/schedules/run-due",
+        lastHeartbeatAt: "2026-03-22 20:41:58",
+        lastOutcome: "success",
+        lastMessage: '{"ok":true,"runs":[]}'
+      })}`,
+      "utf8"
+    );
+
+    const snapshot = await store.getDashboardSnapshot();
+
+    assert.equal(snapshot.scheduler.lastHeartbeatAt, "2026-03-22 20:41:58");
+    assert.equal(snapshot.scheduler.lastOutcome, "success");
   } finally {
     delete process.env.CONTROL_PLANE_DATA_DIR;
     await rm(tempDir, { recursive: true, force: true });

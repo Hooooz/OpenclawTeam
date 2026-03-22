@@ -51,7 +51,7 @@ export type CreateScheduleInput = {
   name: string;
   agentId: string;
   cron: string;
-  nextRunAt: string;
+  nextRunAt?: string;
   summary: string;
   status?: "active" | "paused";
 };
@@ -99,6 +99,14 @@ export type ServerInfo = {
   repository: string;
 };
 
+export type SchedulerStatus = {
+  taskName: string;
+  endpoint: string;
+  lastHeartbeatAt: string | null;
+  lastOutcome: "success" | "failed" | "never";
+  lastMessage: string;
+};
+
 export type DashboardSnapshot = {
   stats: StatItem[];
   focus: FocusItem[];
@@ -107,6 +115,7 @@ export type DashboardSnapshot = {
   schedules: ScheduleRecord[];
   runs: RunRecord[];
   server: ServerInfo;
+  scheduler: SchedulerStatus;
 };
 
 export const seedSkills: SkillRecord[] = [
@@ -296,7 +305,7 @@ export function createRunRecord(input: {
 }
 
 export function createScheduleRecord(
-  input: CreateScheduleInput & { agentName: string }
+  input: CreateScheduleInput & { agentName: string; nextRunAt: string }
 ): ScheduleRecord {
   const slug = input.name
     .trim()

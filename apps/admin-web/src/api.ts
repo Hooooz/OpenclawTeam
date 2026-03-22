@@ -118,6 +118,22 @@ export async function updateRunStatus(
   return response.json() as Promise<{ ok: true }>;
 }
 
+export async function runDueSchedules() {
+  const response = await fetch(`${API_BASE_URL}/api/schedules/run-due`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({})
+  });
+
+  if (!response.ok) {
+    throw new Error(`Run due schedules failed with status ${response.status}`);
+  }
+
+  return response.json() as Promise<{ ok: true }>;
+}
+
 export async function updateAgentSkillBindings(agentId: string, skillIds: string[]) {
   const response = await fetch(`${API_BASE_URL}/api/agents/${agentId}/skills`, {
     method: "PATCH",
