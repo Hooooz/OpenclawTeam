@@ -19,8 +19,9 @@ Evolve the documented internal OpenClaw digital-employee control plane into a wo
 | Environment baseline | complete | GitHub repo, server access, and Windows deployment path established |
 | MVP scaffold | complete | Admin web, control API, shared package, and deploy scripts are in repo and deployed |
 | Object management | complete | Agent create, Skill create, and Agent-Skill binding are working |
-| Runtime execution loop | in_progress | Add manual run trigger, durable run records, and UI execution entry |
-| Deployment verification | pending | Redeploy latest slice and verify the runtime flow on `192.168.31.189` |
+| Runtime execution loop | complete | Manual run trigger, durable run records, and UI execution entry are verified |
+| Deployment verification | complete | Redeployed latest slice and verified the runtime flow on `192.168.31.189` |
+| Deployment hardening | in_progress | Keep stabilizing Windows deployment automation and remove GitHub-sync friction |
 
 ## Key Decisions
 
@@ -35,6 +36,7 @@ Evolve the documented internal OpenClaw digital-employee control plane into a wo
 |---|---|---|
 | Docker Desktop image-pull credentials on the server | open | Keep Node fallback as active path; return with concrete remediation steps later |
 | GitHub auth mode for server-side pull | open | Collect concrete options when deployment automation matures |
+| Local HTTPS push to GitHub is hanging in this session | open | Continue local commit discipline and direct server sync; come back with concrete auth remediation |
 
 ## Files In Scope
 
@@ -50,11 +52,15 @@ Evolve the documented internal OpenClaw digital-employee control plane into a wo
 - `apps/admin-web/src/api.ts`
 - `apps/control-api/src/index.ts`
 - `apps/control-api/src/store.ts`
+- `apps/control-api/test/store.test.ts`
 - `packages/shared/src/index.ts`
 - `infra/scripts/windows/deploy-node.ps1`
+- `infra/scripts/windows/start-control-api.ps1`
+- `infra/scripts/windows/start-admin-web.ps1`
 
 ## Completion Notes
 
 - The documentation phase is closed; this file now tracks engineering delivery.
 - Current implementation baseline is a monorepo deployed to the Windows server with Node-process fallback.
-- The next meaningful milestone is converting `Runs` from static display to an executable, durable control-plane flow.
+- The latest completed milestone converted `Runs` from static display into an executable, durable control-plane flow.
+- The current follow-up focus is reducing operational friction around Windows deployment persistence and GitHub synchronization.

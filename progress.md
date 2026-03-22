@@ -35,3 +35,11 @@
   - `npm run test --workspace @openclaw/control-api`
   - `npm run typecheck`
   - `npm run build`
+- Deployed the manual-run slice to `192.168.31.189` and discovered a Windows deployment persistence issue: services launched from the SSH session died after disconnect.
+- Investigated the issue through runtime logs, task/process checks, and port inspection, then changed the Windows Node fallback from session-bound child processes to Scheduled Tasks backed by dedicated launch scripts.
+- Re-verified after the fix:
+  - deploy script health checks passed
+  - a new SSH session could still reach `http://localhost:3001/health`
+  - external `http://192.168.31.189:3001/health` returned `200`
+  - `POST /api/runs` succeeded for `agent-ops-daily`
+  - paused `agent-doc-backfill` returned `409` with `AGENT_PAUSED`

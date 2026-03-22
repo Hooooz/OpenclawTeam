@@ -54,3 +54,13 @@
 - The next smallest useful slice is manual run triggering with a durable `RunRecord`, because it converts the control plane from pure configuration management into a real execution entry point.
 - `@openclaw/control-api` now has a lightweight built-in test entry based on `node:test` via `tsx --test`, which is enough to keep store-level runtime behavior under red-green control without introducing a heavyweight test framework yet.
 - Root `typecheck` now builds `@openclaw/shared` first, because the workspace consumers resolve shared types from `dist` under the current NodeNext setup.
+- The original Windows Node fallback deployment had a persistence bug:
+  - during the SSH session, `deploy-node.ps1` health checks passed
+  - after the SSH session ended, the child processes disappeared and `3001` stopped listening
+  - root cause is that remote `Start-Process` children were not surviving the SSH session lifecycle
+- The Windows fallback deployment is now hardened by registering `OpenclawControlApi` and `OpenclawAdminWeb` as Scheduled Tasks that invoke dedicated PowerShell launch scripts, which survive SSH disconnects.
+- External verification after the SSH session ended is now successful again:
+  - `http://192.168.31.189:3001/health`
+  - `POST /api/runs` for `agent-ops-daily`
+  - `POST /api/runs` for paused `agent-doc-backfill` returns `409`
+- Local `git push origin main` is currently hanging over HTTPS in this session environment even with terminal prompting disabled, so GitHub is temporarily behind the local and server state.

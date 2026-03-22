@@ -8,6 +8,9 @@ Set-Location $InstallDir
 
 $runtimeDir = Join-Path $InstallDir ".runtime"
 $logDir = Join-Path $InstallDir "logs"
+$apiTaskName = "OpenclawControlApi"
+$webTaskName = "OpenclawAdminWeb"
+$windowsScriptDir = Join-Path $InstallDir "infra\scripts\windows"
 
 New-Item -ItemType Directory -Force -Path $runtimeDir | Out-Null
 New-Item -ItemType Directory -Force -Path $logDir | Out-Null
@@ -43,6 +46,46 @@ function Stop-PortProcess {
   }
 }
 
+function Invoke-ScheduledTaskCommand {
+  param([string[]]$Arguments)
+
+  & schtasks.exe @Arguments | Out-Null
+  if ($LASTEXITCODE -ne 0) {
+    throw "schtasks failed: $($Arguments -join ' ')"
+  }
+}
+
+function Remove-ManagedTask {
+  param([string]$TaskName)
+
+  & schtasks.exe /End /TN $TaskName | Out-Null
+  & schtasks.exe /Delete /TN $TaskName /F | Out-Null
+}
+
+function Register-ManagedTask {
+  param(
+    [string]$TaskName,
+    [string]$TaskCommand
+  )
+
+  Remove-ManagedTask $TaskName
+  Invoke-ScheduledTaskCommand @(
+    "/Create",
+    "/TN",
+    $TaskName,
+    "/SC",
+    "ONSTART",
+    "/RU",
+    "SYSTEM",
+    "/RL",
+    "HIGHEST",
+    "/TR",
+    $TaskCommand,
+    "/F"
+  )
+  Invoke-ScheduledTaskCommand @("/Run", "/TN", $TaskName)
+}
+
 Stop-ManagedProcess (Join-Path $runtimeDir "control-api.pid")
 Stop-ManagedProcess (Join-Path $runtimeDir "admin-web.pid")
 Stop-PortProcess 3001
@@ -51,18 +94,22 @@ Stop-PortProcess 3000
 npm install
 npm run build
 
-$apiCommand = "Set-Location '$InstallDir'; `$env:PORT='3001'; node apps/control-api/dist/index.js *> '$logDir\control-api.log'"
-$apiProcess = Start-Process -FilePath "powershell" -ArgumentList "-NoProfile", "-Command", $apiCommand -PassThru -WindowStyle Hidden
-$apiProcess.Id | Set-Content (Join-Path $runtimeDir "control-api.pid")
+$apiLaunchScript = Join-Path $windowsScriptDir "start-control-api.ps1"
+$webLaunchScript = Join-Path $windowsScriptDir "start-admin-web.ps1"
 
-$webCommand = "Set-Location '$InstallDir'; npm run preview --workspace @openclaw/admin-web *> '$logDir\admin-web.log'"
-$webProcess = Start-Process -FilePath "powershell" -ArgumentList "-NoProfile", "-Command", $webCommand -PassThru -WindowStyle Hidden
-$webProcess.Id | Set-Content (Join-Path $runtimeDir "admin-web.pid")
+$apiTaskCommand = "powershell.exe -NoProfile -ExecutionPolicy Bypass -File ""$apiLaunchScript"""
+$webTaskCommand = "powershell.exe -NoProfile -ExecutionPolicy Bypass -File ""$webLaunchScript"""
+
+Register-ManagedTask -TaskName $apiTaskName -TaskCommand $apiTaskCommand
+Register-ManagedTask -TaskName $webTaskName -TaskCommand $webTaskCommand
+
+$apiTaskName | Set-Content (Join-Path $runtimeDir "control-api.task")
+$webTaskName | Set-Content (Join-Path $runtimeDir "admin-web.task")
 
 Start-Sleep -Seconds 8
 
-Write-Output "Control API PID: $($apiProcess.Id)"
-Write-Output "Admin Web PID: $($webProcess.Id)"
+Write-Output "Control API task: $apiTaskName"
+Write-Output "Admin Web task: $webTaskName"
 
 try {
   $apiHealth = Invoke-WebRequest -UseBasicParsing -Uri "http://localhost:3001/health" -TimeoutSec 5
