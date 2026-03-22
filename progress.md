@@ -20,3 +20,7 @@
 - Verified remote availability from the current environment:
   - `http://192.168.31.189:3000`
   - `http://192.168.31.189:3001/health`
+- Added a persisted agent-creation flow end to end:
+  - Control API now writes control-plane data to `data/control-plane.json`
+  - Admin web now supports create-agent form submission
+  - Remote verification succeeded against the deployed server

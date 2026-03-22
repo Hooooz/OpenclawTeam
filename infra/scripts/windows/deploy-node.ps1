@@ -27,8 +27,26 @@ function Stop-ManagedProcess {
   }
 }
 
+function Stop-PortProcess {
+  param([int]$Port)
+
+  $lines = netstat -ano | Select-String ":$Port"
+  foreach ($line in $lines) {
+    $parts = ($line.ToString() -split "\s+") | Where-Object { $_ }
+    $pidValue = $parts[-1]
+    if ($pidValue -match "^\d+$") {
+      try {
+        Stop-Process -Id ([int]$pidValue) -Force -ErrorAction Stop
+      } catch {
+      }
+    }
+  }
+}
+
 Stop-ManagedProcess (Join-Path $runtimeDir "control-api.pid")
 Stop-ManagedProcess (Join-Path $runtimeDir "admin-web.pid")
+Stop-PortProcess 3001
+Stop-PortProcess 3000
 
 npm install
 npm run build
