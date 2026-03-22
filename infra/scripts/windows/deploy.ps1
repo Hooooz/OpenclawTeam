@@ -21,5 +21,11 @@ if ((-not (Test-Path ".env")) -and (Test-Path ".env.example")) {
   Copy-Item ".env.example" ".env"
 }
 
-docker compose -f .\infra\compose\docker-compose.yml up --build -d
-docker compose -f .\infra\compose\docker-compose.yml ps
+try {
+  docker version | Out-Null
+  docker compose -f .\infra\compose\docker-compose.yml up --build -d
+  docker compose -f .\infra\compose\docker-compose.yml ps
+} catch {
+  Write-Warning "Docker Linux engine unavailable. Falling back to Windows Node deployment."
+  powershell -ExecutionPolicy Bypass -File .\infra\scripts\windows\deploy-node.ps1 -InstallDir $InstallDir
+}

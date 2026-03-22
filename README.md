@@ -54,6 +54,8 @@ Git 已可用，Docker 与 Docker Compose 已可用。
 powershell -ExecutionPolicy Bypass -File .\infra\scripts\windows\deploy.ps1
 ```
 
+当 Docker Desktop Linux engine 不可用时，部署脚本会自动回退到 Windows 原生 Node 进程模式。
+
 ## 当前核心文档
 
 - `大纲.md`
