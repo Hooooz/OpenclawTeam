@@ -3,16 +3,20 @@ import { NavLink, Route, Routes } from "react-router-dom";
 import type {
   AgentRecord,
   CreateAgentInput,
+  CreateScheduleInput,
   CreateSkillInput,
   DashboardSnapshot,
   RunRecord,
+  ScheduleRecord,
   SkillRecord
 } from "@openclaw/shared";
 import {
   createAgent as createAgentRequest,
+  createSchedule as createScheduleRequest,
   createSkill as createSkillRequest,
   fetchDashboardSnapshot,
   triggerRun as triggerRunRequest,
+  updateScheduleStatus as updateScheduleStatusRequest,
   updateAgentSkillBindings as updateAgentSkillBindingsRequest
 } from "./api";
 
@@ -25,6 +29,7 @@ const navItems = [
   { to: "/", label: "控制台" },
   { to: "/agents", label: "数字员工" },
   { to: "/skills", label: "Skills" },
+  { to: "/schedules", label: "调度计划" },
   { to: "/runs", label: "运行记录" },
   { to: "/deploy", label: "部署基线" }
 ];
@@ -64,6 +69,19 @@ export function App() {
 
   async function handleCreateSkill(input: CreateSkillInput) {
     await createSkillRequest(input);
+    await loadSnapshot();
+  }
+
+  async function handleCreateSchedule(input: CreateScheduleInput) {
+    await createScheduleRequest(input);
+    await loadSnapshot();
+  }
+
+  async function handleUpdateScheduleStatus(
+    scheduleId: string,
+    status: "active" | "paused"
+  ) {
+    await updateScheduleStatusRequest(scheduleId, status);
     await loadSnapshot();
   }
 
@@ -147,6 +165,17 @@ export function App() {
               }
             />
             <Route
+              path="/schedules"
+              element={
+                <SchedulesPage
+                  agents={state.data.agents}
+                  onCreateSchedule={handleCreateSchedule}
+                  onUpdateScheduleStatus={handleUpdateScheduleStatus}
+                  schedules={state.data.schedules}
+                />
+              }
+            />
+            <Route
               path="/runs"
               element={
                 <RunsPage
@@ -172,7 +201,7 @@ function DashboardPage({ snapshot }: { snapshot: DashboardSnapshot }) {
         <h2>把 OpenClaw 收敛成一个能运营的内部系统</h2>
         <p className="muted">
           当前主线已经进入可写阶段：数字员工、Skills 与绑定关系都可以进后台。
-          当前开始补执行入口，先从手动触发和运行记录闭环做起。
+          当前开始补执行入口，手动运行和调度计划都已经进入控制面。
         </p>
       </section>
 
@@ -203,6 +232,147 @@ function DashboardPage({ snapshot }: { snapshot: DashboardSnapshot }) {
         </ul>
       </section>
     </div>
+  );
+}
+
+function SchedulesPage({
+  agents,
+  onCreateSchedule,
+  onUpdateScheduleStatus,
+  schedules
+}: {
+  agents: AgentRecord[];
+  onCreateSchedule: (input: CreateScheduleInput) => Promise<void>;
+  onUpdateScheduleStatus: (
+    scheduleId: string,
+    status: "active" | "paused"
+  ) => Promise<void>;
+  schedules: ScheduleRecord[];
+}) {
+  const [name, setName] = useState("");
+  const [agentId, setAgentId] = useState(agents[0]?.id || "");
+  const [cron, setCron] = useState("0 9 * * *");
+  const [nextRunAt, setNextRunAt] = useState("2026-03-23 09:00");
+  const [summary, setSummary] = useState("");
+  const [status, setStatus] = useState<"active" | "paused">("active");
+  const [submitting, setSubmitting] = useState(false);
+  const [savingScheduleId, setSavingScheduleId] = useState<string | null>(null);
+
+  async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setSubmitting(true);
+
+    try {
+      await onCreateSchedule({ name, agentId, cron, nextRunAt, summary, status });
+      setName("");
+      setCron("0 9 * * *");
+      setNextRunAt("2026-03-23 09:00");
+      setSummary("");
+      setStatus("active");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  async function handleToggle(schedule: ScheduleRecord) {
+    setSavingScheduleId(schedule.id);
+
+    try {
+      await onUpdateScheduleStatus(
+        schedule.id,
+        schedule.status === "active" ? "paused" : "active"
+      );
+    } finally {
+      setSavingScheduleId(null);
+    }
+  }
+
+  return (
+    <section className="panel">
+      <div className="panel-header">
+        <div>
+          <p className="eyebrow">Schedule</p>
+          <h3>调度计划</h3>
+        </div>
+        <span className="badge">{schedules.length} 条计划</span>
+      </div>
+
+      <form className="schedule-form" onSubmit={handleSubmit}>
+        <input
+          placeholder="计划名称"
+          required
+          value={name}
+          onChange={(event) => setName(event.target.value)}
+        />
+        <select value={agentId} onChange={(event) => setAgentId(event.target.value)}>
+          {agents.map((agent) => (
+            <option key={agent.id} value={agent.id}>
+              {agent.name}
+            </option>
+          ))}
+        </select>
+        <input
+          placeholder="Cron 表达式"
+          required
+          value={cron}
+          onChange={(event) => setCron(event.target.value)}
+        />
+        <input
+          placeholder="下次执行时间"
+          required
+          value={nextRunAt}
+          onChange={(event) => setNextRunAt(event.target.value)}
+        />
+        <input
+          placeholder="摘要"
+          required
+          value={summary}
+          onChange={(event) => setSummary(event.target.value)}
+        />
+        <select
+          value={status}
+          onChange={(event) => setStatus(event.target.value as "active" | "paused")}
+        >
+          <option value="active">active</option>
+          <option value="paused">paused</option>
+        </select>
+        <button disabled={submitting || agents.length === 0} type="submit">
+          {submitting ? "创建中..." : "创建计划"}
+        </button>
+      </form>
+
+      <div className="card-grid">
+        {schedules.map((schedule) => (
+          <article className="mini-card" key={schedule.id}>
+            <div className="mini-card-top">
+              <strong>{schedule.name}</strong>
+              <span
+                className={`badge ${schedule.status === "paused" ? "badge-outline" : ""}`}
+              >
+                {schedule.status}
+              </span>
+            </div>
+            <p className="muted">{schedule.summary}</p>
+            <div className="mini-card-meta">
+              <span>{schedule.agentName}</span>
+              <span>{schedule.cron}</span>
+              <span>{schedule.nextRunAt}</span>
+            </div>
+            <button
+              disabled={savingScheduleId === schedule.id}
+              onClick={() => void handleToggle(schedule)}
+              type="button"
+            >
+              {savingScheduleId === schedule.id
+                ? "保存中..."
+                : schedule.status === "active"
+                  ? "暂停计划"
+                  : "启用计划"}
+            </button>
+          </article>
+        ))}
+      </div>
+    </section>
   );
 }
 

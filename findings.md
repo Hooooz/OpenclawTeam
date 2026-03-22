@@ -64,3 +64,12 @@
   - `POST /api/runs` for `agent-ops-daily`
   - `POST /api/runs` for paused `agent-doc-backfill` returns `409`
 - Local `git push origin main` is currently hanging over HTTPS in this session environment even with terminal prompting disabled, so GitHub is temporarily behind the local and server state.
+- `Schedules` is now a first-class persisted object in the control plane:
+  - store adds `schedules`
+  - dashboard snapshot returns `schedules`
+  - stats now include schedule count
+  - API supports `POST /api/schedules` and `PATCH /api/schedules/:id/status`
+- Remote verification on `192.168.31.189` succeeded for the schedule slice:
+  - create schedule for `agent-skill-audit`
+  - pause the created schedule
+  - `GET /api/dashboard` now returns 3 schedule records and reflects the paused status

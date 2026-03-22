@@ -3,17 +3,21 @@ import path from "node:path";
 import {
   createAgentRecord,
   createRunRecord,
+  createScheduleRecord,
   createSkillRecord,
   seedAgents,
   seedRuns,
+  seedSchedules,
   seedServerInfo,
   seedSkills,
   type AgentRecord,
   type CreateAgentInput,
+  type CreateScheduleInput,
   type CreateSkillInput,
   type DashboardSnapshot,
   type FocusItem,
   type RunRecord,
+  type ScheduleRecord,
   type StartRunResult,
   type ServerInfo,
   type SkillRecord,
@@ -23,6 +27,7 @@ import {
 type ControlPlaneStore = {
   agents: AgentRecord[];
   skills: SkillRecord[];
+  schedules: ScheduleRecord[];
   runs: RunRecord[];
   server: ServerInfo;
 };
@@ -35,6 +40,7 @@ const dataFile = path.join(dataDir, "control-plane.json");
 const defaultStore: ControlPlaneStore = {
   agents: seedAgents,
   skills: seedSkills,
+  schedules: seedSchedules,
   runs: seedRuns,
   server: seedServerInfo
 };
@@ -73,6 +79,7 @@ async function readStore(): Promise<ControlPlaneStore> {
   const store = JSON.parse(raw) as ControlPlaneStore;
 
   store.agents = normalizeAgents(store.agents);
+  store.schedules = Array.isArray(store.schedules) ? store.schedules : seedSchedules;
 
   return store;
 }
@@ -95,6 +102,11 @@ function buildStats(store: ControlPlaneStore): StatItem[] {
       detail: "已纳入控制面的能力单元"
     },
     {
+      label: "调度计划",
+      value: String(store.schedules.length),
+      detail: "已配置的手动/定时执行入口"
+    },
+    {
       label: "近 24h Runs",
       value: String(store.runs.length),
       detail: "含成功、失败与运行中任务"
@@ -115,7 +127,7 @@ function buildFocus(): FocusItem[] {
     },
     {
       title: "执行闭环",
-      detail: "从手动运行到错误回执先跑通，再扩调度和知识。"
+      detail: "从手动运行到调度计划先跑通，再扩执行器和知识。"
     },
     {
       title: "Windows 部署基线",
@@ -132,6 +144,7 @@ export async function getDashboardSnapshot(): Promise<DashboardSnapshot> {
     focus: buildFocus(),
     agents: store.agents,
     skills: store.skills,
+    schedules: store.schedules,
     runs: store.runs,
     server: store.server
   };
@@ -143,6 +156,10 @@ export async function listAgents() {
 
 export async function listSkills() {
   return (await readStore()).skills;
+}
+
+export async function listSchedules() {
+  return (await readStore()).schedules;
 }
 
 export async function listRuns() {
@@ -171,6 +188,42 @@ export async function createSkill(input: CreateSkillInput) {
   await writeStore(store);
 
   return skill;
+}
+
+export async function createSchedule(input: CreateScheduleInput) {
+  const store = await readStore();
+  const agent = store.agents.find((item) => item.id === input.agentId);
+
+  if (!agent) {
+    return null;
+  }
+
+  const schedule = createScheduleRecord({
+    ...input,
+    agentName: agent.name
+  });
+
+  store.schedules = [schedule, ...store.schedules];
+  await writeStore(store);
+
+  return schedule;
+}
+
+export async function updateScheduleStatus(
+  scheduleId: string,
+  status: "active" | "paused"
+) {
+  const store = await readStore();
+  const schedule = store.schedules.find((item) => item.id === scheduleId);
+
+  if (!schedule) {
+    return null;
+  }
+
+  schedule.status = status;
+  await writeStore(store);
+
+  return schedule;
 }
 
 export async function updateAgentSkillBindings(agentId: string, skillIds: string[]) {

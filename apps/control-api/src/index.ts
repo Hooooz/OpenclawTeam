@@ -1,15 +1,23 @@
 import Fastify from "fastify";
 import cors from "@fastify/cors";
-import type { CreateAgentInput, CreateSkillInput, TriggerRunInput } from "@openclaw/shared";
+import type {
+  CreateAgentInput,
+  CreateScheduleInput,
+  CreateSkillInput,
+  TriggerRunInput
+} from "@openclaw/shared";
 import {
   createAgent,
+  createSchedule,
   createSkill,
   getDashboardSnapshot,
   getServerInfo,
   listAgents,
   listRuns,
+  listSchedules,
   listSkills,
   startManualRun,
+  updateScheduleStatus,
   updateAgentSkillBindings
 } from "./store.js";
 
@@ -32,6 +40,7 @@ app.get("/health", async () => ({
 app.get("/api/dashboard", async () => getDashboardSnapshot());
 app.get("/api/agents", async () => listAgents());
 app.get("/api/skills", async () => listSkills());
+app.get("/api/schedules", async () => listSchedules());
 app.get("/api/runs", async () => listRuns());
 app.get("/api/server", async () => getServerInfo());
 
@@ -96,6 +105,66 @@ app.post<{ Body: CreateSkillInput }>("/api/skills", async (request, reply) => {
     skill
   });
 });
+
+app.post<{ Body: CreateScheduleInput }>("/api/schedules", async (request, reply) => {
+  const body = request.body;
+
+  if (
+    !body?.name?.trim() ||
+    !body?.agentId?.trim() ||
+    !body?.cron?.trim() ||
+    !body?.nextRunAt?.trim() ||
+    !body?.summary?.trim()
+  ) {
+    return reply.status(400).send({
+      ok: false,
+      message: "name, agentId, cron, nextRunAt, and summary are required"
+    });
+  }
+
+  const schedule = await createSchedule(body);
+
+  if (!schedule) {
+    return reply.status(404).send({
+      ok: false,
+      message: "Agent not found"
+    });
+  }
+
+  return reply.status(201).send({
+    ok: true,
+    schedule
+  });
+});
+
+app.patch<{ Params: { scheduleId: string }; Body: { status: "active" | "paused" } }>(
+  "/api/schedules/:scheduleId/status",
+  async (request, reply) => {
+    const { scheduleId } = request.params;
+    const status = request.body?.status;
+
+    if (status !== "active" && status !== "paused") {
+      return reply.status(400).send({
+        ok: false,
+        message: "status must be active or paused"
+      });
+    }
+
+    const schedule = await updateScheduleStatus(scheduleId, status);
+
+    if (!schedule) {
+      return reply.status(404).send({
+        ok: false,
+        message: "Schedule not found"
+      });
+    }
+
+    return reply.send({
+      ok: true,
+      schedule
+    });
+  }
+);
 
 app.post<{ Body: TriggerRunInput }>("/api/runs", async (request, reply) => {
   const agentId = request.body?.agentId?.trim();

@@ -70,3 +70,58 @@ test("startManualRun rejects a paused agent without creating a run", async () =>
     await rm(tempDir, { recursive: true, force: true });
   }
 });
+
+test("createSchedule persists a schedule with the bound agent name", async () => {
+  const { tempDir, store } = await loadStoreWithTempDir();
+
+  try {
+    const beforeSchedules = await store.listSchedules();
+    const schedule = await store.createSchedule({
+      name: "晚间文档补全",
+      agentId: "agent-doc-backfill",
+      cron: "30 20 * * *",
+      nextRunAt: "2026-03-22 20:30",
+      summary: "晚上统一补齐文档缺口。",
+      status: "paused"
+    });
+
+    assert.equal(schedule.agentName, "文档补全助手");
+    assert.equal(schedule.status, "paused");
+
+    const afterSchedules = await store.listSchedules();
+    assert.equal(afterSchedules.length, beforeSchedules.length + 1);
+    assert.equal(afterSchedules[0]?.id, schedule.id);
+
+    const stored = JSON.parse(
+      await readFile(path.join(tempDir, "control-plane.json"), "utf8")
+    ) as { schedules: Array<{ id: string; agentName: string }> };
+
+    assert.equal(stored.schedules[0]?.id, schedule.id);
+    assert.equal(stored.schedules[0]?.agentName, "文档补全助手");
+  } finally {
+    delete process.env.CONTROL_PLANE_DATA_DIR;
+    await rm(tempDir, { recursive: true, force: true });
+  }
+});
+
+test("updateScheduleStatus changes only the target schedule status", async () => {
+  const { tempDir, store } = await loadStoreWithTempDir();
+
+  try {
+    const updated = await store.updateScheduleStatus("schedule-ops-daily-0900", "paused");
+
+    assert.equal(updated?.status, "paused");
+
+    const schedules = await store.listSchedules();
+    const target = schedules.find((item: { id: string }) => item.id === "schedule-ops-daily-0900");
+    const untouched = schedules.find(
+      (item: { id: string }) => item.id === "schedule-skill-audit-1400"
+    );
+
+    assert.equal(target?.status, "paused");
+    assert.equal(untouched?.status, "active");
+  } finally {
+    delete process.env.CONTROL_PLANE_DATA_DIR;
+    await rm(tempDir, { recursive: true, force: true });
+  }
+});

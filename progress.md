@@ -43,3 +43,16 @@
   - external `http://192.168.31.189:3001/health` returned `200`
   - `POST /api/runs` succeeded for `agent-ops-daily`
   - paused `agent-doc-backfill` returned `409` with `AGENT_PAUSED`
+- Added schedule management in the current session:
+  - shared types and seed data now include `ScheduleRecord`
+  - store supports `listSchedules`, `createSchedule`, and `updateScheduleStatus`
+  - admin web has a new `调度计划` page for create and pause/resume
+  - store tests now cover schedule creation and status mutation
+- Verified schedule flow locally:
+  - `npm run test --workspace @openclaw/control-api`
+  - `npm run typecheck`
+  - `npm run build`
+- Verified schedule flow remotely:
+  - `POST /api/schedules` succeeded
+  - `PATCH /api/schedules/:id/status` succeeded
+  - `GET /api/dashboard` returned updated schedule count and records

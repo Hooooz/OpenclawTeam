@@ -1,5 +1,6 @@
 import type {
   CreateAgentInput,
+  CreateScheduleInput,
   CreateSkillInput,
   DashboardSnapshot,
   TriggerRunInput
@@ -45,6 +46,41 @@ export async function createSkill(input: CreateSkillInput) {
 
   if (!response.ok) {
     throw new Error(`Create skill failed with status ${response.status}`);
+  }
+
+  return response.json() as Promise<{ ok: true }>;
+}
+
+export async function createSchedule(input: CreateScheduleInput) {
+  const response = await fetch(`${API_BASE_URL}/api/schedules`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify(input)
+  });
+
+  if (!response.ok) {
+    throw new Error(`Create schedule failed with status ${response.status}`);
+  }
+
+  return response.json() as Promise<{ ok: true }>;
+}
+
+export async function updateScheduleStatus(
+  scheduleId: string,
+  status: "active" | "paused"
+) {
+  const response = await fetch(`${API_BASE_URL}/api/schedules/${scheduleId}/status`, {
+    method: "PATCH",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({ status })
+  });
+
+  if (!response.ok) {
+    throw new Error(`Update schedule status failed with status ${response.status}`);
   }
 
   return response.json() as Promise<{ ok: true }>;

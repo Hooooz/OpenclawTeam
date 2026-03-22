@@ -181,12 +181,23 @@ a {
   margin-bottom: 20px;
 }
 
+.schedule-form {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  margin-bottom: 20px;
+}
+
 .agent-form input,
 .skill-form input,
+.schedule-form input,
 .agent-form select,
 .skill-form select,
+.schedule-form select,
 .agent-form button,
-.skill-form button {
+.skill-form button,
+.schedule-form button,
+.mini-card button {
   width: 100%;
   min-height: 46px;
   border: 1px solid rgba(28, 36, 48, 0.12);
@@ -208,8 +219,17 @@ a {
   cursor: pointer;
 }
 
+.schedule-form button,
+.mini-card button {
+  background: #4b6a3d;
+  color: #fff8f0;
+  cursor: pointer;
+}
+
 .agent-form button:disabled,
-.skill-form button:disabled {
+.skill-form button:disabled,
+.schedule-form button:disabled,
+.mini-card button:disabled {
   cursor: wait;
   opacity: 0.7;
 }
@@ -355,6 +375,10 @@ a {
   }
 
   .skill-form {
+    grid-template-columns: 1fr;
+  }
+
+  .schedule-form {
     grid-template-columns: 1fr;
   }
 }

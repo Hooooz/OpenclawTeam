@@ -36,6 +36,26 @@ export type TriggerRunInput = {
   agentId: string;
 };
 
+export type ScheduleRecord = {
+  id: string;
+  name: string;
+  agentId: string;
+  agentName: string;
+  cron: string;
+  nextRunAt: string;
+  status: "active" | "paused";
+  summary: string;
+};
+
+export type CreateScheduleInput = {
+  name: string;
+  agentId: string;
+  cron: string;
+  nextRunAt: string;
+  summary: string;
+  status?: "active" | "paused";
+};
+
 export type RunRecord = {
   id: string;
   agentName: string;
@@ -80,6 +100,7 @@ export type DashboardSnapshot = {
   focus: FocusItem[];
   agents: AgentRecord[];
   skills: SkillRecord[];
+  schedules: ScheduleRecord[];
   runs: RunRecord[];
   server: ServerInfo;
 };
@@ -179,6 +200,29 @@ export const seedRuns: RunRecord[] = [
   }
 ];
 
+export const seedSchedules: ScheduleRecord[] = [
+  {
+    id: "schedule-ops-daily-0900",
+    name: "运营日报晨间执行",
+    agentId: "agent-ops-daily",
+    agentName: "运营日报助手",
+    cron: "0 9 * * *",
+    nextRunAt: "2026-03-23 09:00",
+    status: "active",
+    summary: "每天上午 9 点自动生成运营日报。"
+  },
+  {
+    id: "schedule-skill-audit-1400",
+    name: "Skill 巡检午间检查",
+    agentId: "agent-skill-audit",
+    agentName: "Skill 巡检助手",
+    cron: "0 14 * * 1-5",
+    nextRunAt: "2026-03-23 14:00",
+    status: "active",
+    summary: "工作日午后检查前 24 小时失败调用。"
+  }
+];
+
 export const seedServerInfo: ServerInfo = {
   host: "192.168.31.189",
   os: "Windows 11 Pro",
@@ -244,4 +288,25 @@ export function createRunRecord(input: {
     startedAt,
     traceId: `trace-${timestamp.toLowerCase()}`
   } satisfies RunRecord;
+}
+
+export function createScheduleRecord(
+  input: CreateScheduleInput & { agentName: string }
+): ScheduleRecord {
+  const slug = input.name
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+
+  return {
+    id: `schedule-${slug || Date.now()}`,
+    name: input.name.trim(),
+    agentId: input.agentId,
+    agentName: input.agentName,
+    cron: input.cron.trim(),
+    nextRunAt: input.nextRunAt.trim(),
+    status: input.status || "active",
+    summary: input.summary.trim()
+  };
 }
