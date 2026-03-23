@@ -23,6 +23,7 @@ import {
   updateScheduleStatus,
   updateAgentSkillBindings
 } from "./store.js";
+import { createControlCenterService } from "./control-center.js";
 
 const host = process.env.HOST || "0.0.0.0";
 const port = Number(process.env.PORT || 3001);
@@ -30,6 +31,7 @@ const port = Number(process.env.PORT || 3001);
 const app = Fastify({
   logger: true
 });
+const controlCenter = createControlCenterService();
 
 await app.register(cors, {
   origin: true
@@ -38,6 +40,57 @@ await app.register(cors, {
 app.get("/health", async () => ({
   ok: true,
   service: "control-api"
+}));
+
+app.get("/api/control-center/dashboard", async () => ({
+  ok: true,
+  data: await controlCenter.getDashboard()
+}));
+app.get("/api/control-center/agents", async () => ({
+  ok: true,
+  data: await controlCenter.listAgents()
+}));
+app.get<{ Params: { agentId: string } }>("/api/control-center/agents/:agentId", async (request, reply) => {
+  const agent = await controlCenter.getAgentDetail(request.params.agentId);
+
+  if (!agent) {
+    return reply.status(404).send({
+      ok: false,
+      message: "Agent not found"
+    });
+  }
+
+  return {
+    ok: true,
+    data: agent
+  };
+});
+app.get("/api/control-center/runs", async () => ({
+  ok: true,
+  data: await controlCenter.listRuns()
+}));
+app.get<{ Params: { runId: string } }>("/api/control-center/runs/:runId", async (request, reply) => {
+  const run = await controlCenter.getRunDetail(request.params.runId);
+
+  if (!run) {
+    return reply.status(404).send({
+      ok: false,
+      message: "Run not found"
+    });
+  }
+
+  return {
+    ok: true,
+    data: run
+  };
+});
+app.get("/api/control-center/schedules", async () => ({
+  ok: true,
+  data: await controlCenter.listSchedules()
+}));
+app.get("/api/control-center/settings", async () => ({
+  ok: true,
+  data: await controlCenter.getSettings()
 }));
 
 app.get("/api/dashboard", async () => getDashboardSnapshot());
