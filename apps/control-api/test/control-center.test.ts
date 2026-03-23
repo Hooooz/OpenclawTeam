@@ -218,7 +218,7 @@ async function createFixture() {
     },
     scheduler: {
       taskName: "OpenclawScheduleSweep",
-      endpoint: "http://localhost:3001/api/schedules/run-due",
+      endpoint: "http://localhost:3201/api/schedules/run-due",
       lastHeartbeatAt: "2026-03-23 10:20",
       lastOutcome: "success",
       lastMessage: "ok"

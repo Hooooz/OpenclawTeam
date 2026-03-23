@@ -100,8 +100,8 @@ function Register-ManagedTask {
 
 Stop-ManagedProcess (Join-Path $runtimeDir "control-api.pid")
 Stop-ManagedProcess (Join-Path $runtimeDir "admin-web.pid")
-Stop-PortProcess 3001
-Stop-PortProcess 3000
+Stop-PortProcess 3201
+Stop-PortProcess 3200
 
 npm install
 npm run build
@@ -129,14 +129,14 @@ Write-Output "Admin Web task: $webTaskName"
 Write-Output "Schedule sweep task: $scheduleSweepTaskName"
 
 try {
-  $apiHealth = Invoke-WebRequest -UseBasicParsing -Uri "http://localhost:3001/health" -TimeoutSec 5
+  $apiHealth = Invoke-WebRequest -UseBasicParsing -Uri "http://localhost:3201/health" -TimeoutSec 5
   Write-Output "API health: $($apiHealth.StatusCode)"
 } catch {
   Write-Warning "API health check failed. Review logs\control-api.log"
 }
 
 try {
-  $webHealth = Invoke-WebRequest -UseBasicParsing -Uri "http://localhost:3000" -TimeoutSec 5
+  $webHealth = Invoke-WebRequest -UseBasicParsing -Uri "http://localhost:3200" -TimeoutSec 5
   Write-Output "Web health: $($webHealth.StatusCode)"
 } catch {
   Write-Warning "Web health check failed. Review logs\admin-web.log"

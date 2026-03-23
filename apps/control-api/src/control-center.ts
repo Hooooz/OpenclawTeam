@@ -1091,8 +1091,8 @@ function buildSettings(config: OpenClawConfig, status: OpenClawStatus, fallback:
     lastDeploy: formatDateTime(config.meta?.lastTouchedAt || "—"),
     version: config.meta?.lastTouchedVersion || "unknown",
     ports: [
-      { service: "Admin Web", port: 3000, protocol: "HTTP", dataSource: "mock" },
-      { service: "Control API", port: 3001, protocol: "HTTP", dataSource: "mock" },
+      { service: "Admin Web", port: 3200, protocol: "HTTP", dataSource: "mock" },
+      { service: "Control API", port: 3201, protocol: "HTTP", dataSource: "mock" },
       {
         service: "OpenClaw Gateway",
         port: config.gateway?.port || 18789,

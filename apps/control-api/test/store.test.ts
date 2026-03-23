@@ -406,7 +406,7 @@ test("getDashboardSnapshot reads persisted scheduler heartbeat", async () => {
       JSON.stringify(
         {
           taskName: "OpenclawScheduleSweep",
-          endpoint: "http://localhost:3001/api/schedules/run-due",
+          endpoint: "http://localhost:3201/api/schedules/run-due",
           lastHeartbeatAt: "2026-03-22 12:45:00",
           lastOutcome: "success",
           lastMessage: "sweep ok"
@@ -436,7 +436,7 @@ test("getDashboardSnapshot reads scheduler heartbeat written with utf8 bom", asy
       path.join(tempDir, "schedule-sweep-heartbeat.json"),
       `\uFEFF${JSON.stringify({
         taskName: "OpenclawScheduleSweep",
-        endpoint: "http://localhost:3001/api/schedules/run-due",
+        endpoint: "http://localhost:3201/api/schedules/run-due",
         lastHeartbeatAt: "2026-03-22 20:41:58",
         lastOutcome: "success",
         lastMessage: '{"ok":true,"runs":[]}'

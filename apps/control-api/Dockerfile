@@ -26,6 +26,6 @@ RUN npm ci --omit=dev
 COPY --from=build /app/apps/control-api/dist apps/control-api/dist
 COPY --from=build /app/packages/shared/dist packages/shared/dist
 
-EXPOSE 3001
+EXPOSE 3201
 
 CMD ["node", "apps/control-api/dist/index.js"]

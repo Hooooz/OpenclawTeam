@@ -31,8 +31,8 @@ npm run dev:web
 
 默认端口：
 
-- Admin Web: `http://localhost:3000`
-- Control API: `http://localhost:3001`
+- Admin Web: `http://localhost:3200`
+- Control API: `http://localhost:3201`
 
 ## 构建
 

@@ -7,7 +7,7 @@ $ErrorActionPreference = "Stop"
 $logDir = Join-Path $InstallDir "logs"
 $dataDir = Join-Path $InstallDir "data"
 $heartbeatFile = Join-Path $dataDir "schedule-sweep-heartbeat.json"
-$endpoint = "http://localhost:3001/api/schedules/run-due"
+$endpoint = "http://localhost:3201/api/schedules/run-due"
 $taskName = "OpenclawScheduleSweep"
 New-Item -ItemType Directory -Force -Path $logDir | Out-Null
 New-Item -ItemType Directory -Force -Path $dataDir | Out-Null

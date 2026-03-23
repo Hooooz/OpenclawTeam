@@ -26,7 +26,7 @@ import {
 import { createControlCenterService } from "./control-center.js";
 
 const host = process.env.HOST || "0.0.0.0";
-const port = Number(process.env.PORT || 3001);
+const port = Number(process.env.PORT || 3201);
 
 const app = Fastify({
   logger: true

@@ -13,6 +13,7 @@ __pycache__/
 .venv/
 venv/
 *.log
+*.tsbuildinfo
 data/
 logs/
 .runtime/

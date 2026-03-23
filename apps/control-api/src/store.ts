@@ -261,7 +261,7 @@ async function readSchedulerStatus(): Promise<SchedulerStatus> {
 
     return {
       taskName: heartbeat.taskName?.trim() || "OpenclawScheduleSweep",
-      endpoint: heartbeat.endpoint?.trim() || "http://localhost:3001/api/schedules/run-due",
+      endpoint: heartbeat.endpoint?.trim() || "http://localhost:3201/api/schedules/run-due",
       lastHeartbeatAt: heartbeat.lastHeartbeatAt?.trim() || null,
       lastOutcome:
         heartbeat.lastOutcome === "success" || heartbeat.lastOutcome === "failed"
@@ -272,7 +272,7 @@ async function readSchedulerStatus(): Promise<SchedulerStatus> {
   } catch {
     return {
       taskName: "OpenclawScheduleSweep",
-      endpoint: "http://localhost:3001/api/schedules/run-due",
+      endpoint: "http://localhost:3201/api/schedules/run-due",
       lastHeartbeatAt: null,
       lastOutcome: "never",
       lastMessage: "尚未收到调度守护心跳。"
