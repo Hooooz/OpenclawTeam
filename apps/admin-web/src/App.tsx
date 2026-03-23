@@ -1,130 +1,198 @@
 import { useEffect, useState } from "react";
-import { NavLink, Route, Routes } from "react-router-dom";
-import type {
-  AgentRecord,
-  CreateAgentInput,
-  CreateScheduleInput,
-  CreateSkillInput,
-  DashboardSnapshot,
-  RunRecord,
-  ScheduleRecord,
-  SkillRecord
-} from "@openclaw/shared";
 import {
-  createAgent as createAgentRequest,
-  createSchedule as createScheduleRequest,
-  createSkill as createSkillRequest,
-  fetchDashboardSnapshot,
-  runDueSchedules as runDueSchedulesRequest,
-  triggerScheduleRun as triggerScheduleRunRequest,
-  triggerRun as triggerRunRequest,
-  updateRunStatus as updateRunStatusRequest,
-  updateScheduleStatus as updateScheduleStatusRequest,
-  updateAgentSkillBindings as updateAgentSkillBindingsRequest
+  Link,
+  NavLink,
+  Route,
+  Routes,
+  useParams
+} from "react-router-dom";
+import type {
+  ControlCenterAgentDetail,
+  ControlCenterAgentListItem,
+  ControlCenterDashboard,
+  ControlCenterRunDetail,
+  ControlCenterRunListItem,
+  ControlCenterSettings,
+  ControlCenterTriggerSource,
+  ControlCenterRunStatus,
+  ControlCenterAgentStatus,
+  DataSource,
+  ProvenanceRecord
+} from "./api";
+import {
+  fetchControlCenterAgentDetail,
+  fetchControlCenterAgents,
+  fetchControlCenterDashboard,
+  fetchControlCenterRunDetail,
+  fetchControlCenterRuns,
+  fetchControlCenterSettings
 } from "./api";
 
-type LoadState =
+type LoadState<T> =
   | { status: "loading" }
-  | { status: "ready"; data: DashboardSnapshot }
+  | { status: "ready"; data: T }
   | { status: "error"; message: string };
 
 const navItems = [
   { to: "/", label: "控制台" },
   { to: "/agents", label: "数字员工" },
-  { to: "/skills", label: "Skills" },
-  { to: "/schedules", label: "调度计划" },
-  { to: "/runs", label: "运行记录" },
-  { to: "/deploy", label: "部署基线" }
+  { to: "/runs", label: "对话与工作记录" },
+  { to: "/settings", label: "系统设置" }
 ];
 
-export function App() {
-  const [state, setState] = useState<LoadState>({ status: "loading" });
-
-  async function loadSnapshot() {
-    try {
-      const data = await fetchDashboardSnapshot();
-      setState({ status: "ready", data });
-    } catch (error) {
-      const message =
-        error instanceof Error ? error.message : "Unknown dashboard loading error";
-      setState({ status: "error", message });
-    }
-  }
+function useRemoteResource<T>(loader: () => Promise<T>, deps: unknown[]) {
+  const [state, setState] = useState<LoadState<T>>({ status: "loading" });
+  const [reloadVersion, setReloadVersion] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
+    setState({ status: "loading" });
 
-    fetchDashboardSnapshot()
-      .then((data) => !cancelled && setState({ status: "ready", data }))
-      .catch(
-        (error: Error) => !cancelled && setState({ status: "error", message: error.message })
-      );
+    loader()
+      .then((data) => {
+        if (!cancelled) {
+          setState({ status: "ready", data });
+        }
+      })
+      .catch((error: unknown) => {
+        if (!cancelled) {
+          setState({
+            status: "error",
+            message: error instanceof Error ? error.message : "Unknown request error"
+          });
+        }
+      });
 
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [...deps, reloadVersion]);
 
-  async function handleCreateAgent(input: CreateAgentInput) {
-    await createAgentRequest(input);
-    await loadSnapshot();
+  return {
+    state,
+    reload: () => setReloadVersion((value) => value + 1)
+  };
+}
+
+function SourceChip({
+  dataSource,
+  dataSourceNote
+}: {
+  dataSource: DataSource;
+  dataSourceNote?: string;
+}) {
+  return (
+    <span
+      className={dataSource === "live" ? "badge badge-live" : "badge badge-outline"}
+      title={dataSourceNote || ""}
+    >
+      {dataSource === "live" ? "LIVE" : "MOCK"}
+    </span>
+  );
+}
+
+function StatusPill({
+  status
+}: {
+  status: ControlCenterAgentStatus | ControlCenterRunStatus | "healthy" | "degraded" | "down" | "active" | "paused" | "error";
+}) {
+  const danger =
+    status === "failed" || status === "error" || status === "down";
+  const outline = status === "paused" || status === "idle" || status === "degraded";
+
+  return (
+    <span
+      className={`badge ${danger ? "badge-danger" : ""} ${outline ? "badge-outline" : ""}`}
+    >
+      {status}
+    </span>
+  );
+}
+
+function ProvenanceNote({ record }: { record: ProvenanceRecord }) {
+  if (record.dataSource !== "mock" && (!record.mockFields || record.mockFields.length === 0)) {
+    return null;
   }
 
-  async function handleCreateSkill(input: CreateSkillInput) {
-    await createSkillRequest(input);
-    await loadSnapshot();
+  return (
+    <div className="provenance-note">
+      <SourceChip dataSource={record.dataSource} dataSourceNote={record.dataSourceNote} />
+      {record.mockFields && record.mockFields.length > 0 ? (
+        <span>模拟字段：{record.mockFields.join(", ")}</span>
+      ) : (
+        <span>{record.dataSourceNote || "该条记录包含保留演示数据。"}</span>
+      )}
+    </div>
+  );
+}
+
+function PageState<T>({
+  state,
+  title,
+  children,
+  onReload
+}: {
+  state: LoadState<T>;
+  title: string;
+  children: (data: T) => React.ReactNode;
+  onReload: () => void;
+}) {
+  if (state.status === "loading") {
+    return (
+      <section className="panel">
+        <div className="panel-header">
+          <div>
+            <p className="eyebrow">Loading</p>
+            <h3>{title}</h3>
+          </div>
+        </div>
+        <p className="muted">正在读取控制面数据...</p>
+      </section>
+    );
   }
 
-  async function handleCreateSchedule(input: CreateScheduleInput) {
-    await createScheduleRequest(input);
-    await loadSnapshot();
+  if (state.status === "error") {
+    return (
+      <section className="panel panel-danger">
+        <div className="panel-header">
+          <div>
+            <p className="eyebrow">Error</p>
+            <h3>{title}</h3>
+          </div>
+          <button className="secondary-button" onClick={onReload} type="button">
+            重试
+          </button>
+        </div>
+        <p>{state.message}</p>
+      </section>
+    );
   }
 
-  async function handleUpdateScheduleStatus(
-    scheduleId: string,
-    status: "active" | "paused"
-  ) {
-    await updateScheduleStatusRequest(scheduleId, status);
-    await loadSnapshot();
-  }
+  return <>{children(state.data)}</>;
+}
 
-  async function handleTriggerScheduleRun(scheduleId: string) {
-    await triggerScheduleRunRequest(scheduleId);
-    await loadSnapshot();
+function triggerLabel(value: ControlCenterTriggerSource) {
+  switch (value) {
+    case "chat":
+      return "对话";
+    case "timed-task":
+      return "定时任务";
+    case "template":
+      return "模板";
+    default:
+      return "手动";
   }
+}
 
-  async function handleRunDueSchedules() {
-    await runDueSchedulesRequest();
-    await loadSnapshot();
-  }
-
-  async function handleUpdateAgentSkills(agentId: string, skillIds: string[]) {
-    await updateAgentSkillBindingsRequest(agentId, skillIds);
-    await loadSnapshot();
-  }
-
-  async function handleTriggerRun(agentId: string) {
-    await triggerRunRequest({ agentId });
-    await loadSnapshot();
-  }
-
-  async function handleUpdateRunStatus(
-    runId: string,
-    status: "success" | "failed",
-    summary: string
-  ) {
-    await updateRunStatusRequest(runId, status, summary);
-    await loadSnapshot();
-  }
-
+export function App() {
   return (
     <div className="shell">
       <aside className="sidebar">
         <div>
-          <p className="eyebrow">OpenClawTeam</p>
+          <p className="eyebrow">OpenClaw Control Center</p>
           <h1>数字员工管理后台</h1>
           <p className="muted">
-            内部控制面，统一管理 Agent、Skills、调度和执行审计。
+            把服务器上的 OpenClaw 会话、数字员工和工作记录收敛成一个可运营的企业控制面。
           </p>
         </div>
 
@@ -143,699 +211,972 @@ export function App() {
         </nav>
 
         <div className="sidebar-card">
-          <p className="sidebar-label">部署目标</p>
+          <p className="sidebar-label">当前目标</p>
           <strong>192.168.31.189</strong>
-          <p className="muted">Windows 11 + Docker / Node fallback</p>
+          <p className="muted">Administrator/.openclaw live runtime</p>
         </div>
       </aside>
 
       <main className="main">
-        {state.status === "loading" && (
-          <div className="panel">
-            <p className="muted">正在加载控制面快照...</p>
-          </div>
-        )}
-
-        {state.status === "error" && (
-          <div className="panel panel-danger">
-            <h2>控制面 API 不可用</h2>
-            <p>{state.message}</p>
-          </div>
-        )}
-
-        {state.status === "ready" && (
-          <Routes>
-            <Route path="/" element={<DashboardPage snapshot={state.data} />} />
-            <Route
-              path="/agents"
-              element={
-                <AgentsPage
-                  agents={state.data.agents}
-                  skills={state.data.skills}
-                  onCreateAgent={handleCreateAgent}
-                  onUpdateAgentSkills={handleUpdateAgentSkills}
-                />
-              }
-            />
-            <Route
-              path="/skills"
-              element={
-                <SkillsPage
-                  skills={state.data.skills}
-                  onCreateSkill={handleCreateSkill}
-                />
-              }
-            />
-            <Route
-              path="/schedules"
-              element={
-                <SchedulesPage
-                  agents={state.data.agents}
-                  onCreateSchedule={handleCreateSchedule}
-                  onRunDueSchedules={handleRunDueSchedules}
-                  onTriggerScheduleRun={handleTriggerScheduleRun}
-                  onUpdateScheduleStatus={handleUpdateScheduleStatus}
-                  schedules={state.data.schedules}
-                />
-              }
-            />
-            <Route
-              path="/runs"
-              element={
-                <RunsPage
-                  agents={state.data.agents}
-                  onTriggerRun={handleTriggerRun}
-                  onUpdateRunStatus={handleUpdateRunStatus}
-                  runs={state.data.runs}
-                />
-              }
-            />
-            <Route path="/deploy" element={<DeployPage snapshot={state.data} />} />
-          </Routes>
-        )}
+        <Routes>
+          <Route path="/" element={<DashboardPage />} />
+          <Route path="/console" element={<DashboardPage />} />
+          <Route path="/agents" element={<AgentsPage />} />
+          <Route path="/agents/:agentId" element={<AgentDetailPage />} />
+          <Route path="/runs" element={<RunsPage />} />
+          <Route path="/runs/:runId" element={<RunDetailPage />} />
+          <Route path="/settings" element={<SettingsPage />} />
+        </Routes>
       </main>
     </div>
   );
 }
 
-function DashboardPage({ snapshot }: { snapshot: DashboardSnapshot }) {
-  return (
-    <div className="page-grid">
-      <section className="hero">
-        <p className="eyebrow">Control Plane</p>
-        <h2>把 OpenClaw 收敛成一个能运营的内部系统</h2>
-        <p className="muted">
-          当前主线已经进入可写阶段：数字员工、Skills 与绑定关系都可以进后台。
-          当前开始补执行入口，手动运行和调度计划都已经进入控制面。
-        </p>
-      </section>
-
-      <section className="stat-grid">
-        {snapshot.stats.map((stat) => (
-          <article className="stat-card" key={stat.label}>
-            <p className="stat-label">{stat.label}</p>
-            <strong className="stat-value">{stat.value}</strong>
-            <p className="muted">{stat.detail}</p>
-          </article>
-        ))}
-      </section>
-
-      <section className="panel">
-        <div className="panel-header">
-          <div>
-            <p className="eyebrow">Focus</p>
-            <h3>当前实施重点</h3>
-          </div>
-        </div>
-        <ul className="focus-list">
-          {snapshot.focus.map((item) => (
-            <li key={item.title}>
-              <strong>{item.title}</strong>
-              <span>{item.detail}</span>
-            </li>
-          ))}
-        </ul>
-      </section>
-
-      <section className="panel">
-        <div className="panel-header">
-          <div>
-            <p className="eyebrow">Scheduler</p>
-            <h3>自动调度守护</h3>
-          </div>
-          <span
-            className={`badge ${
-              snapshot.scheduler.lastOutcome === "failed" ? "badge-danger" : ""
-            }`}
-          >
-            {snapshot.scheduler.lastOutcome}
-          </span>
-        </div>
-        <div className="mini-card-meta">
-          <span>{snapshot.scheduler.taskName}</span>
-          <span>{snapshot.scheduler.endpoint}</span>
-          <span>{snapshot.scheduler.lastHeartbeatAt || "暂无心跳"}</span>
-        </div>
-        <p className="muted">{snapshot.scheduler.lastMessage}</p>
-      </section>
-    </div>
-  );
-}
-
-function SchedulesPage({
-  agents,
-  onCreateSchedule,
-  onRunDueSchedules,
-  onTriggerScheduleRun,
-  onUpdateScheduleStatus,
-  schedules
-}: {
-  agents: AgentRecord[];
-  onCreateSchedule: (input: CreateScheduleInput) => Promise<void>;
-  onRunDueSchedules: () => Promise<void>;
-  onTriggerScheduleRun: (scheduleId: string) => Promise<void>;
-  onUpdateScheduleStatus: (
-    scheduleId: string,
-    status: "active" | "paused"
-  ) => Promise<void>;
-  schedules: ScheduleRecord[];
-}) {
-  const [name, setName] = useState("");
-  const [agentId, setAgentId] = useState(agents[0]?.id || "");
-  const [cron, setCron] = useState("0 9 * * *");
-  const [summary, setSummary] = useState("");
-  const [status, setStatus] = useState<"active" | "paused">("active");
-  const [submitting, setSubmitting] = useState(false);
-  const [savingScheduleId, setSavingScheduleId] = useState<string | null>(null);
-  const [triggeringScheduleId, setTriggeringScheduleId] = useState<string | null>(null);
-  const [runningDue, setRunningDue] = useState(false);
-
-  async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    setSubmitting(true);
-
-    try {
-      await onCreateSchedule({ name, agentId, cron, summary, status });
-      setName("");
-      setCron("0 9 * * *");
-      setSummary("");
-      setStatus("active");
-    } finally {
-      setSubmitting(false);
-    }
-  }
-
-  async function handleToggle(schedule: ScheduleRecord) {
-    setSavingScheduleId(schedule.id);
-
-    try {
-      await onUpdateScheduleStatus(
-        schedule.id,
-        schedule.status === "active" ? "paused" : "active"
-      );
-    } finally {
-      setSavingScheduleId(null);
-    }
-  }
-
-  async function handleTrigger(scheduleId: string) {
-    setTriggeringScheduleId(scheduleId);
-
-    try {
-      await onTriggerScheduleRun(scheduleId);
-    } finally {
-      setTriggeringScheduleId(null);
-    }
-  }
-
-  async function handleRunDue() {
-    setRunningDue(true);
-
-    try {
-      await onRunDueSchedules();
-    } finally {
-      setRunningDue(false);
-    }
-  }
+function DashboardPage() {
+  const { state, reload } = useRemoteResource(fetchControlCenterDashboard, []);
 
   return (
-    <section className="panel">
-      <div className="panel-header">
-        <div>
-          <p className="eyebrow">Schedule</p>
-          <h3>调度计划</h3>
-        </div>
-        <div className="inline-actions">
-          <span className="badge">{schedules.length} 条计划</span>
-          <button disabled={runningDue} onClick={() => void handleRunDue()} type="button">
-            {runningDue ? "执行中..." : "执行到期计划"}
-          </button>
-        </div>
-      </div>
-
-      <form className="schedule-form" onSubmit={handleSubmit}>
-        <input
-          placeholder="计划名称"
-          required
-          value={name}
-          onChange={(event) => setName(event.target.value)}
-        />
-        <select value={agentId} onChange={(event) => setAgentId(event.target.value)}>
-          {agents.map((agent) => (
-            <option key={agent.id} value={agent.id}>
-              {agent.name}
-            </option>
-          ))}
-        </select>
-        <input
-          placeholder="Cron 表达式"
-          required
-          value={cron}
-          onChange={(event) => setCron(event.target.value)}
-        />
-        <input
-          placeholder="摘要"
-          required
-          value={summary}
-          onChange={(event) => setSummary(event.target.value)}
-        />
-        <select
-          value={status}
-          onChange={(event) => setStatus(event.target.value as "active" | "paused")}
-        >
-          <option value="active">active</option>
-          <option value="paused">paused</option>
-        </select>
-        <button disabled={submitting || agents.length === 0} type="submit">
-          {submitting ? "创建中..." : "创建计划"}
-        </button>
-      </form>
-
-      <div className="card-grid">
-        {schedules.map((schedule) => (
-          <article className="mini-card" key={schedule.id}>
-            <div className="mini-card-top">
-              <strong>{schedule.name}</strong>
-              <span
-                className={`badge ${schedule.status === "paused" ? "badge-outline" : ""}`}
-              >
-                {schedule.status}
-              </span>
-            </div>
-            <p className="muted">{schedule.summary}</p>
-            <div className="mini-card-meta">
-              <span>{schedule.agentName}</span>
-              <span>{schedule.cron}</span>
-              <span>{schedule.nextRunAt}</span>
-            </div>
-            <button
-              disabled={schedule.status !== "active" || triggeringScheduleId === schedule.id}
-              onClick={() => void handleTrigger(schedule.id)}
-              type="button"
-            >
-              {triggeringScheduleId === schedule.id ? "执行中..." : "立即执行"}
-            </button>
-            <button
-              disabled={savingScheduleId === schedule.id}
-              onClick={() => void handleToggle(schedule)}
-              type="button"
-            >
-              {savingScheduleId === schedule.id
-                ? "保存中..."
-                : schedule.status === "active"
-                  ? "暂停计划"
-                  : "启用计划"}
-            </button>
-          </article>
-        ))}
-      </div>
-    </section>
-  );
-}
-
-function AgentsPage({
-  agents,
-  skills,
-  onCreateAgent,
-  onUpdateAgentSkills
-}: {
-  agents: AgentRecord[];
-  skills: SkillRecord[];
-  onCreateAgent: (input: CreateAgentInput) => Promise<void>;
-  onUpdateAgentSkills: (agentId: string, skillIds: string[]) => Promise<void>;
-}) {
-  const [name, setName] = useState("");
-  const [model, setModel] = useState("gpt-5.4-mini");
-  const [summary, setSummary] = useState("");
-  const [status, setStatus] = useState<"active" | "paused">("active");
-  const [submitting, setSubmitting] = useState(false);
-  const [savingAgentId, setSavingAgentId] = useState<string | null>(null);
-
-  async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    setSubmitting(true);
-
-    try {
-      await onCreateAgent({ name, model, summary, status });
-      setName("");
-      setModel("gpt-5.4-mini");
-      setSummary("");
-      setStatus("active");
-    } finally {
-      setSubmitting(false);
-    }
-  }
-
-  async function handleToggleSkill(agent: AgentRecord, skillId: string) {
-    const nextSkillIds = agent.skillIds.includes(skillId)
-      ? agent.skillIds.filter((id) => id !== skillId)
-      : [...agent.skillIds, skillId];
-
-    setSavingAgentId(agent.id);
-
-    try {
-      await onUpdateAgentSkills(agent.id, nextSkillIds);
-    } finally {
-      setSavingAgentId(null);
-    }
-  }
-
-  return (
-    <section className="panel">
-      <div className="panel-header">
-        <div>
-          <p className="eyebrow">Registry</p>
-          <h3>数字员工</h3>
-        </div>
-        <span className="badge">{agents.length} 个对象</span>
-      </div>
-
-      <form className="agent-form" onSubmit={handleSubmit}>
-        <input
-          placeholder="数字员工名称"
-          required
-          value={name}
-          onChange={(event) => setName(event.target.value)}
-        />
-        <input
-          placeholder="模型"
-          required
-          value={model}
-          onChange={(event) => setModel(event.target.value)}
-        />
-        <input
-          placeholder="职责摘要"
-          required
-          value={summary}
-          onChange={(event) => setSummary(event.target.value)}
-        />
-        <select
-          value={status}
-          onChange={(event) => setStatus(event.target.value as "active" | "paused")}
-        >
-          <option value="active">active</option>
-          <option value="paused">paused</option>
-        </select>
-        <button disabled={submitting} type="submit">
-          {submitting ? "创建中..." : "创建 Agent"}
-        </button>
-      </form>
-
-      <div className="table">
-        <div className="table-head">
-          <span>名称</span>
-          <span>状态</span>
-          <span>模型</span>
-          <span>Skills</span>
-          <span>说明</span>
-        </div>
-        {agents.map((agent) => (
-          <div className="agent-record" key={agent.id}>
-            <div className="table-row">
-              <span>{agent.name}</span>
-              <span>{agent.status}</span>
-              <span>{agent.model}</span>
-              <span>{agent.skillCount}</span>
-              <span>{agent.summary}</span>
-            </div>
-            <div className="binding-box">
-              <div className="binding-header">
-                <strong>绑定 Skills</strong>
-                {savingAgentId === agent.id && <span className="muted">保存中...</span>}
+    <PageState onReload={reload} state={state} title="控制台总览">
+      {(data) => (
+        <div className="page-grid">
+          <section className="hero">
+            <div className="panel-header">
+              <div>
+                <p className="eyebrow">Enterprise View</p>
+                <h2>控制面已经接入服务器上的真实 OpenClaw 数据</h2>
+                <p className="muted">
+                  当前重点是把数字员工、对话与工作记录、系统状态作为一条完整浏览链路跑通。
+                </p>
               </div>
-              <div className="skill-chip-grid">
-                {skills.map((skill) => {
-                  const checked = agent.skillIds.includes(skill.id);
-                  return (
-                    <label
-                      className={checked ? "skill-chip skill-chip-active" : "skill-chip"}
-                      key={`${agent.id}-${skill.id}`}
-                    >
-                      <input
-                        checked={checked}
-                        onChange={() => void handleToggleSkill(agent, skill.id)}
-                        type="checkbox"
-                      />
-                      <span>{skill.name}</span>
-                    </label>
-                  );
-                })}
-              </div>
+              <button className="secondary-button" onClick={reload} type="button">
+                刷新数据
+              </button>
             </div>
-          </div>
-        ))}
-      </div>
-    </section>
-  );
-}
+          </section>
 
-function SkillsPage({
-  skills,
-  onCreateSkill
-}: {
-  skills: SkillRecord[];
-  onCreateSkill: (input: CreateSkillInput) => Promise<void>;
-}) {
-  const [name, setName] = useState("");
-  const [category, setCategory] = useState("custom");
-  const [version, setVersion] = useState("1.0.0");
-  const [description, setDescription] = useState("");
-  const [status, setStatus] = useState<"active" | "draft">("draft");
-  const [submitting, setSubmitting] = useState(false);
-
-  async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    setSubmitting(true);
-
-    try {
-      await onCreateSkill({ name, category, version, description, status });
-      setName("");
-      setCategory("custom");
-      setVersion("1.0.0");
-      setDescription("");
-      setStatus("draft");
-    } finally {
-      setSubmitting(false);
-    }
-  }
-
-  return (
-    <section className="panel">
-      <div className="panel-header">
-        <div>
-          <p className="eyebrow">Capability</p>
-          <h3>Skills</h3>
-        </div>
-        <span className="badge">{skills.length} 个能力</span>
-      </div>
-
-      <form className="skill-form" onSubmit={handleSubmit}>
-        <input
-          placeholder="Skill 名称"
-          required
-          value={name}
-          onChange={(event) => setName(event.target.value)}
-        />
-        <input
-          placeholder="分类"
-          required
-          value={category}
-          onChange={(event) => setCategory(event.target.value)}
-        />
-        <input
-          placeholder="版本"
-          required
-          value={version}
-          onChange={(event) => setVersion(event.target.value)}
-        />
-        <input
-          placeholder="描述"
-          required
-          value={description}
-          onChange={(event) => setDescription(event.target.value)}
-        />
-        <select
-          value={status}
-          onChange={(event) => setStatus(event.target.value as "active" | "draft")}
-        >
-          <option value="draft">draft</option>
-          <option value="active">active</option>
-        </select>
-        <button disabled={submitting} type="submit">
-          {submitting ? "创建中..." : "创建 Skill"}
-        </button>
-      </form>
-
-      <div className="card-grid">
-        {skills.map((skill) => (
-          <article className="mini-card" key={skill.id}>
-            <div className="mini-card-top">
-              <strong>{skill.name}</strong>
-              <span className="badge badge-outline">{skill.category}</span>
-            </div>
-            <p className="muted">{skill.description}</p>
-            <div className="mini-card-meta">
-              <span>版本 {skill.version}</span>
-              <span>{skill.status}</span>
-            </div>
-          </article>
-        ))}
-      </div>
-    </section>
-  );
-}
-
-function RunsPage({
-  agents,
-  onTriggerRun,
-  onUpdateRunStatus,
-  runs
-}: {
-  agents: AgentRecord[];
-  onTriggerRun: (agentId: string) => Promise<void>;
-  onUpdateRunStatus: (
-    runId: string,
-    status: "success" | "failed",
-    summary: string
-  ) => Promise<void>;
-  runs: RunRecord[];
-}) {
-  const [triggeringAgentId, setTriggeringAgentId] = useState<string | null>(null);
-  const [savingRunId, setSavingRunId] = useState<string | null>(null);
-
-  async function handleTrigger(agentId: string) {
-    setTriggeringAgentId(agentId);
-
-    try {
-      await onTriggerRun(agentId);
-    } finally {
-      setTriggeringAgentId(null);
-    }
-  }
-
-  async function handleResolveRun(run: RunRecord, status: "success" | "failed") {
-    setSavingRunId(run.id);
-
-    try {
-      await onUpdateRunStatus(
-        run.id,
-        status,
-        status === "success" ? "已在控制台回填完成结果。" : "已在控制台回填失败结果。"
-      );
-    } finally {
-      setSavingRunId(null);
-    }
-  }
-
-  return (
-    <section className="panel">
-      <div className="panel-header">
-        <div>
-          <p className="eyebrow">Runtime</p>
-          <h3>运行记录</h3>
-        </div>
-      </div>
-      <div className="card-grid">
-        {agents.map((agent) => (
-          <article className="mini-card" key={agent.id}>
-            <div className="mini-card-top">
-              <strong>{agent.name}</strong>
-              <span className="badge badge-outline">{agent.status}</span>
-            </div>
-            <p className="muted">{agent.summary}</p>
-            <div className="mini-card-meta">
-              <span>{agent.model}</span>
-              <span>{agent.skillCount} skills</span>
-            </div>
-            <button
-              disabled={agent.status !== "active" || triggeringAgentId === agent.id}
-              onClick={() => void handleTrigger(agent.id)}
-              type="button"
-            >
-              {triggeringAgentId === agent.id ? "触发中..." : "手动触发"}
-            </button>
-          </article>
-        ))}
-      </div>
-      <div className="timeline">
-        {runs.map((run) => (
-          <article className="timeline-item" key={run.id}>
-            <div className="timeline-mark" />
-            <div className="timeline-content">
-              <div className="timeline-header">
-                <strong>{run.agentName}</strong>
-                <span className={`badge ${run.status === "failed" ? "badge-danger" : ""}`}>
-                  {run.status}
-                </span>
-              </div>
-              <p>{run.summary}</p>
-              <div className="mini-card-meta">
-                <span>{run.triggerType}</span>
-                <span>{run.startedAt}</span>
-                <span>{run.traceId}</span>
-              </div>
-              {run.status === "running" && (
-                <div className="run-actions">
-                  <button
-                    disabled={savingRunId === run.id}
-                    onClick={() => void handleResolveRun(run, "success")}
-                    type="button"
-                  >
-                    {savingRunId === run.id ? "保存中..." : "标记成功"}
-                  </button>
-                  <button
-                    className="danger-button"
-                    disabled={savingRunId === run.id}
-                    onClick={() => void handleResolveRun(run, "failed")}
-                    type="button"
-                  >
-                    {savingRunId === run.id ? "保存中..." : "标记失败"}
-                  </button>
+          <section className="stat-grid">
+            {data.metrics.map((metric) => (
+              <article className="stat-card" key={metric.label}>
+                <div className="mini-card-top">
+                  <p className="stat-label">{metric.label}</p>
+                  <SourceChip
+                    dataSource={metric.dataSource}
+                    dataSourceNote={metric.dataSourceNote}
+                  />
                 </div>
-              )}
+                <strong className="stat-value">{metric.value}</strong>
+                <p className="muted">
+                  变化值 {metric.change}
+                  {metric.danger ? " · 需要关注" : ""}
+                </p>
+              </article>
+            ))}
+          </section>
+
+          <section className="dashboard-two-column">
+            <article className="panel">
+              <div className="panel-header">
+                <div>
+                  <p className="eyebrow">Health</p>
+                  <h3>系统服务状态</h3>
+                </div>
+              </div>
+              <div className="list-stack">
+                {data.services.map((service) => (
+                  <div className="list-row" key={service.name}>
+                    <div>
+                      <strong>{service.name}</strong>
+                      <p className="muted">{service.lastHeartbeat}</p>
+                    </div>
+                    <div className="inline-meta">
+                      <SourceChip
+                        dataSource={service.dataSource}
+                        dataSourceNote={service.dataSourceNote}
+                      />
+                      <StatusPill status={service.status} />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </article>
+
+            <article className="panel">
+              <div className="panel-header">
+                <div>
+                  <p className="eyebrow">Risk</p>
+                  <h3>安全与运行风险</h3>
+                </div>
+              </div>
+              <div className="list-stack">
+                {data.risks.map((risk) => (
+                  <div className="risk-item" key={risk.id}>
+                    <div className="mini-card-top">
+                      <strong>{risk.message}</strong>
+                      <StatusPill status={risk.level === "high" ? "failed" : "degraded"} />
+                    </div>
+                    <div className="inline-meta">
+                      <span className="muted">{risk.time}</span>
+                      <SourceChip
+                        dataSource={risk.dataSource}
+                        dataSourceNote={risk.dataSourceNote}
+                      />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </article>
+          </section>
+
+          <section className="dashboard-two-column">
+            <article className="panel">
+              <div className="panel-header">
+                <div>
+                  <p className="eyebrow">Employees</p>
+                  <h3>重点数字员工</h3>
+                </div>
+                <Link className="text-link" to="/agents">
+                  查看全部
+                </Link>
+              </div>
+              <div className="list-stack">
+                {data.agents.map((agent) => (
+                  <Link className="list-row list-link" key={agent.id} to={`/agents/${agent.id}`}>
+                    <div className="list-identity">
+                      <span className="avatar-badge">{agent.avatar}</span>
+                      <div>
+                        <strong>{agent.name}</strong>
+                        <p className="muted">
+                          {agent.position} · 最近 {agent.lastRun}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="inline-meta">
+                      <SourceChip
+                        dataSource={agent.dataSource}
+                        dataSourceNote={agent.dataSourceNote}
+                      />
+                      <StatusPill status={agent.status} />
+                    </div>
+                  </Link>
+                ))}
+              </div>
+            </article>
+
+            <article className="panel">
+              <div className="panel-header">
+                <div>
+                  <p className="eyebrow">Runs</p>
+                  <h3>最近对话与工作记录</h3>
+                </div>
+                <Link className="text-link" to="/runs">
+                  查看全部
+                </Link>
+              </div>
+              <div className="list-stack">
+                {data.runs.map((run) => (
+                  <Link className="list-row list-link" key={run.id} to={`/runs/${run.id}`}>
+                    <div>
+                      <strong>{run.taskName}</strong>
+                      <p className="muted">
+                        {run.agentName} · {run.startTime} · {run.duration}
+                      </p>
+                      <p className="small-note">{run.memorySummary || "无记忆更新摘要"}</p>
+                    </div>
+                    <div className="inline-meta">
+                      <SourceChip
+                        dataSource={run.dataSource}
+                        dataSourceNote={run.dataSourceNote}
+                      />
+                      <StatusPill status={run.status} />
+                    </div>
+                  </Link>
+                ))}
+              </div>
+            </article>
+          </section>
+
+          <section className="panel">
+            <div className="panel-header">
+              <div>
+                <p className="eyebrow">Schedules</p>
+                <h3>定时任务视图</h3>
+              </div>
             </div>
-          </article>
-        ))}
-      </div>
-    </section>
+            <div className="list-stack">
+              {data.schedules.map((schedule) => (
+                <div className="list-row" key={schedule.id}>
+                  <div>
+                    <strong>{schedule.planName}</strong>
+                    <p className="muted">
+                      {schedule.agentName} · {schedule.cron} · 下次 {schedule.nextRun}
+                    </p>
+                  </div>
+                  <div className="inline-meta">
+                    <SourceChip
+                      dataSource={schedule.dataSource}
+                      dataSourceNote={schedule.dataSourceNote}
+                    />
+                    <StatusPill status={schedule.lastStatus} />
+                  </div>
+                </div>
+              ))}
+            </div>
+          </section>
+        </div>
+      )}
+    </PageState>
   );
 }
 
-function DeployPage({ snapshot }: { snapshot: DashboardSnapshot }) {
+function AgentsPage() {
+  const { state, reload } = useRemoteResource(fetchControlCenterAgents, []);
+  const [search, setSearch] = useState("");
+
   return (
-    <section className="panel">
-      <div className="panel-header">
-        <div>
-          <p className="eyebrow">Deploy</p>
-          <h3>部署基线</h3>
+    <PageState onReload={reload} state={state} title="数字员工">
+      {(agents) => {
+        const filtered = agents.filter((agent) => {
+          const query = search.trim();
+          if (!query) {
+            return true;
+          }
+
+          return [agent.name, agent.position, agent.department, agent.role, agent.group]
+            .join(" ")
+            .toLowerCase()
+            .includes(query.toLowerCase());
+        });
+
+        return (
+          <section className="panel">
+            <div className="panel-header">
+              <div>
+                <p className="eyebrow">Employees</p>
+                <h3>数字员工列表</h3>
+                <p className="muted">当前共 {agents.length} 位数字员工，已接入服务器运行时。</p>
+              </div>
+              <button className="secondary-button" onClick={reload} type="button">
+                刷新列表
+              </button>
+            </div>
+
+            <div className="toolbar">
+              <input
+                className="search-input"
+                onChange={(event) => setSearch(event.target.value)}
+                placeholder="搜索姓名、职位、部门或职责"
+                value={search}
+              />
+            </div>
+
+            <div className="data-table">
+              <div className="data-table-head">
+                <span>员工</span>
+                <span>定位</span>
+                <span>模型 / 能力</span>
+                <span>最近状态</span>
+                <span>来源</span>
+              </div>
+              {filtered.map((agent) => (
+                <Link className="data-table-row" key={agent.id} to={`/agents/${agent.id}`}>
+                  <div className="list-identity">
+                    <span className="avatar-badge">{agent.avatar}</span>
+                    <div>
+                      <strong>{agent.name}</strong>
+                      <p className="muted">
+                        {agent.position} · {agent.department}
+                      </p>
+                    </div>
+                  </div>
+                  <div>
+                    <strong>{agent.motto}</strong>
+                    <p className="muted">{agent.role}</p>
+                  </div>
+                  <div>
+                    <p>{agent.model}</p>
+                    <p className="muted">
+                      {agent.skillCount} skills · {agent.knowledgeCount} knowledge
+                    </p>
+                  </div>
+                  <div className="stack-right">
+                    <StatusPill status={agent.status} />
+                    <span className="muted">
+                      {agent.lastRunTime}
+                      {agent.lastRunStatus ? ` · ${agent.lastRunStatus}` : ""}
+                    </span>
+                  </div>
+                  <div className="stack-right">
+                    <SourceChip
+                      dataSource={agent.dataSource}
+                      dataSourceNote={agent.dataSourceNote}
+                    />
+                    <span className="muted">{agent.group}</span>
+                  </div>
+                </Link>
+              ))}
+            </div>
+          </section>
+        );
+      }}
+    </PageState>
+  );
+}
+
+function AgentDetailPage() {
+  const params = useParams();
+  const agentId = params.agentId || "";
+  const { state, reload } = useRemoteResource(
+    () => fetchControlCenterAgentDetail(agentId),
+    [agentId]
+  );
+
+  return (
+    <PageState onReload={reload} state={state} title="数字员工详情">
+      {(agent) => (
+        <div className="page-grid">
+          <section className="panel">
+            <div className="panel-header">
+              <div className="header-identity">
+                <span className="hero-avatar">{agent.avatar}</span>
+                <div>
+                  <p className="eyebrow">Employee Profile</p>
+                  <h3>{agent.name}</h3>
+                  <p className="muted">
+                    {agent.position} · {agent.department}
+                  </p>
+                  <p className="quote-line">“{agent.motto}”</p>
+                </div>
+              </div>
+              <div className="inline-meta">
+                <SourceChip
+                  dataSource={agent.dataSource}
+                  dataSourceNote={agent.dataSourceNote}
+                />
+                <StatusPill status={agent.status} />
+              </div>
+            </div>
+            <p className="lead-text">{agent.description}</p>
+            <ProvenanceNote record={agent} />
+          </section>
+
+          <section className="stat-grid">
+            {[
+              { label: "职责定位", value: agent.role },
+              { label: "负责人", value: agent.owner },
+              { label: "模型", value: agent.model },
+              { label: "成功率", value: `${agent.successRate}%` },
+              { label: "最近工作", value: agent.lastRunTime },
+              { label: "创建时间", value: agent.createdAt }
+            ].map((item) => (
+              <article className="stat-card" key={item.label}>
+                <p className="stat-label">{item.label}</p>
+                <strong className="detail-stat">{item.value}</strong>
+              </article>
+            ))}
+          </section>
+
+          <section className="dashboard-two-column">
+            <article className="panel">
+              <div className="panel-header">
+                <div>
+                  <p className="eyebrow">Persona</p>
+                  <h3>个性化信息</h3>
+                </div>
+              </div>
+              <div className="list-stack">
+                <div className="list-row">
+                  <strong>沟通风格</strong>
+                  <span>{agent.communicationStyle}</span>
+                </div>
+                <div className="list-row">
+                  <strong>工作信条</strong>
+                  <span>{agent.workCreed}</span>
+                </div>
+                <div className="tag-cloud">
+                  {agent.specialties.map((item) => (
+                    <span className="tag-chip" key={item}>
+                      {item}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            </article>
+
+            <article className="panel">
+              <div className="panel-header">
+                <div>
+                  <p className="eyebrow">Prompt</p>
+                  <h3>系统提示与行为规则</h3>
+                </div>
+              </div>
+              <pre className="code-block">{agent.systemPrompt}</pre>
+              <ul className="rule-list">
+                {agent.behaviorRules.map((rule) => (
+                  <li key={rule}>{rule}</li>
+                ))}
+              </ul>
+            </article>
+          </section>
+
+          <section className="dashboard-two-column">
+            <article className="panel">
+              <div className="panel-header">
+                <div>
+                  <p className="eyebrow">Knowledge</p>
+                  <h3>知识与记忆</h3>
+                </div>
+              </div>
+              <div className="list-stack">
+                {agent.knowledgeSources.map((source) => (
+                  <div className="list-row" key={source.id}>
+                    <div>
+                      <strong>{source.name}</strong>
+                      <p className="muted">
+                        {source.type} · 最近同步 {source.lastSync}
+                      </p>
+                    </div>
+                    <SourceChip
+                      dataSource={source.dataSource}
+                      dataSourceNote={source.dataSourceNote}
+                    />
+                  </div>
+                ))}
+              </div>
+            </article>
+
+            <article className="panel">
+              <div className="panel-header">
+                <div>
+                  <p className="eyebrow">Skills</p>
+                  <h3>能力绑定</h3>
+                </div>
+              </div>
+              <div className="list-stack">
+                {agent.skills.map((skill) => (
+                  <div className="list-row" key={skill.id}>
+                    <div>
+                      <strong>{skill.name}</strong>
+                      <p className="muted">{skill.category}</p>
+                    </div>
+                    <div className="inline-meta">
+                      <SourceChip
+                        dataSource={skill.dataSource}
+                        dataSourceNote={skill.dataSourceNote}
+                      />
+                      <StatusPill status={skill.status === "active" ? "healthy" : "paused"} />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </article>
+          </section>
+
+          <section className="dashboard-two-column">
+            <article className="panel">
+              <div className="panel-header">
+                <div>
+                  <p className="eyebrow">Schedules</p>
+                  <h3>定时任务</h3>
+                </div>
+              </div>
+              <div className="list-stack">
+                {agent.schedules.map((schedule) => (
+                  <div className="list-row" key={schedule.id}>
+                    <div>
+                      <strong>{schedule.name}</strong>
+                      <p className="muted">
+                        {schedule.cron} · 下次 {schedule.nextRun}
+                      </p>
+                    </div>
+                    <div className="inline-meta">
+                      <SourceChip
+                        dataSource={schedule.dataSource}
+                        dataSourceNote={schedule.dataSourceNote}
+                      />
+                      <StatusPill status={schedule.enabled ? "active" : "paused"} />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </article>
+
+            <article className="panel">
+              <div className="panel-header">
+                <div>
+                  <p className="eyebrow">Runs</p>
+                  <h3>最近工作记录</h3>
+                </div>
+              </div>
+              <div className="list-stack">
+                {agent.recentRuns.map((run) => (
+                  <Link className="list-row list-link" key={run.id} to={`/runs/${run.id}`}>
+                    <div>
+                      <strong>{run.taskName}</strong>
+                      <p className="muted">
+                        {run.time} · {run.duration}
+                      </p>
+                    </div>
+                    <div className="inline-meta">
+                      <SourceChip
+                        dataSource={run.dataSource}
+                        dataSourceNote={run.dataSourceNote}
+                      />
+                      <StatusPill status={run.status} />
+                    </div>
+                  </Link>
+                ))}
+              </div>
+            </article>
+          </section>
+
+          <section className="panel">
+            <div className="panel-header">
+              <div>
+                <p className="eyebrow">Audit</p>
+                <h3>审计与变更</h3>
+              </div>
+            </div>
+            <div className="list-stack">
+              {agent.auditLog.map((item) => (
+                <div className="list-row" key={item.id}>
+                  <div>
+                    <strong>
+                      {item.user} · {item.action}
+                    </strong>
+                    <p className="muted">
+                      {item.time} · {item.detail}
+                    </p>
+                  </div>
+                  <SourceChip
+                    dataSource={item.dataSource}
+                    dataSourceNote={item.dataSourceNote}
+                  />
+                </div>
+              ))}
+            </div>
+          </section>
         </div>
-      </div>
-      <div className="deploy-grid">
-        <article className="mini-card">
-          <strong>目标主机</strong>
-          <p className="muted">{snapshot.server.host}</p>
-        </article>
-        <article className="mini-card">
-          <strong>操作系统</strong>
-          <p className="muted">{snapshot.server.os}</p>
-        </article>
-        <article className="mini-card">
-          <strong>容器运行时</strong>
-          <p className="muted">{snapshot.server.containerRuntime}</p>
-        </article>
-        <article className="mini-card">
-          <strong>GitHub 仓库</strong>
-          <p className="muted">{snapshot.server.repository}</p>
-        </article>
-        <article className="mini-card">
-          <strong>调度守护</strong>
-          <p className="muted">{snapshot.scheduler.taskName}</p>
-          <div className="mini-card-meta">
-            <span>{snapshot.scheduler.lastOutcome}</span>
-            <span>{snapshot.scheduler.lastHeartbeatAt || "暂无心跳"}</span>
-          </div>
-        </article>
-      </div>
-    </section>
+      )}
+    </PageState>
+  );
+}
+
+function RunsPage() {
+  const { state, reload } = useRemoteResource(fetchControlCenterRuns, []);
+  const [search, setSearch] = useState("");
+
+  return (
+    <PageState onReload={reload} state={state} title="对话与工作记录">
+      {(runs) => {
+        const filtered = runs.filter((run) => {
+          const query = search.trim();
+          if (!query) {
+            return true;
+          }
+
+          return [run.agentName, run.taskName, run.conversationTopic, run.sourcePlatform, run.runId]
+            .join(" ")
+            .toLowerCase()
+            .includes(query.toLowerCase());
+        });
+
+        return (
+          <section className="panel">
+            <div className="panel-header">
+              <div>
+                <p className="eyebrow">Runs</p>
+                <h3>对话与工作记录</h3>
+                <p className="muted">当前展示 live session 与保留 mock 任务两类记录。</p>
+              </div>
+              <button className="secondary-button" onClick={reload} type="button">
+                刷新记录
+              </button>
+            </div>
+
+            <div className="toolbar">
+              <input
+                className="search-input"
+                onChange={(event) => setSearch(event.target.value)}
+                placeholder="搜索员工、任务、对话主题或来源平台"
+                value={search}
+              />
+            </div>
+
+            <div className="data-table">
+              <div className="data-table-head">
+                <span>记录</span>
+                <span>数字员工</span>
+                <span>对话主题</span>
+                <span>工作摘要</span>
+                <span>状态 / 来源</span>
+              </div>
+              {filtered.map((run) => (
+                <Link className="data-table-row" key={run.id} to={`/runs/${run.id}`}>
+                  <div>
+                    <strong>{run.runId}</strong>
+                    <p className="muted">
+                      {run.taskName} · {run.startTime} · {run.duration}
+                    </p>
+                  </div>
+                  <div>
+                    <strong>{run.agentName}</strong>
+                    <p className="muted">{run.agentPosition}</p>
+                  </div>
+                  <div>
+                    <strong>{run.conversationTopic}</strong>
+                    <p className="muted">
+                      {run.sourcePlatform} · {triggerLabel(run.triggerSource)}
+                    </p>
+                  </div>
+                  <div>
+                    <strong>{run.outputSummary}</strong>
+                    <p className="muted">{run.memorySummary}</p>
+                  </div>
+                  <div className="stack-right">
+                    <StatusPill status={run.status} />
+                    <SourceChip
+                      dataSource={run.dataSource}
+                      dataSourceNote={run.dataSourceNote}
+                    />
+                  </div>
+                </Link>
+              ))}
+            </div>
+          </section>
+        );
+      }}
+    </PageState>
+  );
+}
+
+function RunDetailPage() {
+  const params = useParams();
+  const runId = params.runId || "";
+  const { state, reload } = useRemoteResource(
+    () => fetchControlCenterRunDetail(runId),
+    [runId]
+  );
+
+  return (
+    <PageState onReload={reload} state={state} title="工作记录详情">
+      {(run) => (
+        <div className="page-grid">
+          <section className="panel">
+            <div className="panel-header">
+              <div>
+                <p className="eyebrow">Run Detail</p>
+                <h3>{run.taskName}</h3>
+                <p className="muted">
+                  {run.agentName} · {run.agentPosition}
+                </p>
+              </div>
+              <div className="inline-meta">
+                <SourceChip
+                  dataSource={run.dataSource}
+                  dataSourceNote={run.dataSourceNote}
+                />
+                <StatusPill status={run.status} />
+              </div>
+            </div>
+            <p className="lead-text">{run.outputSummary}</p>
+            <ProvenanceNote record={run} />
+          </section>
+
+          <section className="stat-grid">
+            {[
+              { label: "Run ID", value: run.runId },
+              { label: "Trace ID", value: run.traceId },
+              { label: "触发方式", value: triggerLabel(run.triggerSource) },
+              { label: "来源平台", value: run.sourcePlatform },
+              { label: "开始时间", value: run.startTime },
+              { label: "结束时间", value: run.endTime }
+            ].map((item) => (
+              <article className="stat-card" key={item.label}>
+                <p className="stat-label">{item.label}</p>
+                <strong className="detail-stat">{item.value}</strong>
+              </article>
+            ))}
+          </section>
+
+          <section className="dashboard-two-column">
+            <article className="panel">
+              <div className="panel-header">
+                <div>
+                  <p className="eyebrow">Conversation</p>
+                  <h3>对话上下文</h3>
+                </div>
+              </div>
+              <div className="list-stack">
+                <div className="list-row">
+                  <strong>对话主题</strong>
+                  <span>{run.conversationTopic}</span>
+                </div>
+                <div className="list-row">
+                  <strong>记忆更新</strong>
+                  <span>{run.memorySummary}</span>
+                </div>
+                <div className="list-row">
+                  <strong>版本对比</strong>
+                  <span>{run.versionDiff}</span>
+                </div>
+                <div className="list-row">
+                  <strong>触发人</strong>
+                  <span>{run.triggeredBy}</span>
+                </div>
+              </div>
+            </article>
+
+            <article className="panel">
+              <div className="panel-header">
+                <div>
+                  <p className="eyebrow">Output</p>
+                  <h3>输入与输出</h3>
+                </div>
+              </div>
+              <pre className="code-block">{JSON.stringify(run.inputParams, null, 2)}</pre>
+              <pre className="code-block">{run.outputResult || "暂无完整输出"}</pre>
+              {run.errorMessage && <p className="error-text">{run.errorMessage}</p>}
+            </article>
+          </section>
+
+          <section className="dashboard-two-column">
+            <article className="panel">
+              <div className="panel-header">
+                <div>
+                  <p className="eyebrow">Steps</p>
+                  <h3>执行步骤</h3>
+                </div>
+              </div>
+              <div className="list-stack">
+                {run.steps.map((step) => (
+                  <div className="list-row" key={step.id}>
+                    <div>
+                      <strong>{step.name}</strong>
+                      <p className="muted">
+                        {step.startTime} · {step.duration} · {step.detail}
+                      </p>
+                    </div>
+                    <div className="inline-meta">
+                      <SourceChip
+                        dataSource={step.dataSource}
+                        dataSourceNote={step.dataSourceNote}
+                      />
+                      <StatusPill status={step.status as ControlCenterRunStatus} />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </article>
+
+            <article className="panel">
+              <div className="panel-header">
+                <div>
+                  <p className="eyebrow">Skills</p>
+                  <h3>技能调用</h3>
+                </div>
+              </div>
+              <div className="list-stack">
+                {run.skillCalls.map((call) => (
+                  <div className="list-row" key={call.id}>
+                    <div>
+                      <strong>{call.skillName}</strong>
+                      <p className="muted">
+                        {call.duration} · input: {call.input}
+                      </p>
+                      <p className="small-note">{call.output}</p>
+                    </div>
+                    <div className="inline-meta">
+                      <SourceChip
+                        dataSource={call.dataSource}
+                        dataSourceNote={call.dataSourceNote}
+                      />
+                      <StatusPill status={call.result as ControlCenterRunStatus} />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </article>
+          </section>
+
+          <section className="dashboard-two-column">
+            <article className="panel">
+              <div className="panel-header">
+                <div>
+                  <p className="eyebrow">Logs</p>
+                  <h3>执行日志</h3>
+                </div>
+              </div>
+              <div className="log-list">
+                {run.logs.map((item, index) => (
+                  <div className="log-item" key={`${item.time}-${index}`}>
+                    <span>{item.time}</span>
+                    <strong>{item.level}</strong>
+                    <p>{item.message}</p>
+                  </div>
+                ))}
+              </div>
+            </article>
+
+            <article className="panel">
+              <div className="panel-header">
+                <div>
+                  <p className="eyebrow">Audit</p>
+                  <h3>审计记录</h3>
+                </div>
+              </div>
+              <div className="list-stack">
+                {run.audit.map((item, index) => (
+                  <div className="list-row" key={`${item.user}-${index}`}>
+                    <div>
+                      <strong>{item.user}</strong>
+                      <p className="muted">
+                        {item.action} · {item.time}
+                      </p>
+                    </div>
+                    <SourceChip
+                      dataSource={item.dataSource}
+                      dataSourceNote={item.dataSourceNote}
+                    />
+                  </div>
+                ))}
+              </div>
+            </article>
+          </section>
+        </div>
+      )}
+    </PageState>
+  );
+}
+
+function SettingsPage() {
+  const { state, reload } = useRemoteResource(fetchControlCenterSettings, []);
+
+  return (
+    <PageState onReload={reload} state={state} title="系统设置">
+      {(settings) => (
+        <div className="page-grid">
+          <section className="panel">
+            <div className="panel-header">
+              <div>
+                <p className="eyebrow">Deploy</p>
+                <h3>部署与运行状态</h3>
+              </div>
+              <button className="secondary-button" onClick={reload} type="button">
+                刷新状态
+              </button>
+            </div>
+            <div className="deploy-grid">
+              {[
+                { label: "主机地址", value: settings.deployInfo.host },
+                { label: "操作系统", value: settings.deployInfo.os },
+                { label: "运行环境", value: settings.deployInfo.runtime },
+                { label: "仓库地址", value: settings.deployInfo.repo },
+                { label: "最近部署", value: settings.deployInfo.lastDeploy },
+                { label: "版本号", value: settings.deployInfo.version }
+              ].map((item) => (
+                <article className="mini-card" key={item.label}>
+                  <div className="mini-card-top">
+                    <strong>{item.label}</strong>
+                    <SourceChip
+                      dataSource={settings.deployInfo.dataSource}
+                      dataSourceNote={settings.deployInfo.dataSourceNote}
+                    />
+                  </div>
+                  <p className="muted">{item.value}</p>
+                </article>
+              ))}
+            </div>
+          </section>
+
+          <section className="dashboard-two-column">
+            <article className="panel">
+              <div className="panel-header">
+                <div>
+                  <p className="eyebrow">Ports</p>
+                  <h3>运行端口</h3>
+                </div>
+              </div>
+              <div className="list-stack">
+                {settings.deployInfo.ports.map((port) => (
+                  <div className="list-row" key={`${port.service}-${port.port}`}>
+                    <div>
+                      <strong>{port.service}</strong>
+                      <p className="muted">
+                        {port.protocol}:{port.port}
+                      </p>
+                    </div>
+                    <SourceChip
+                      dataSource={port.dataSource}
+                      dataSourceNote={port.dataSourceNote}
+                    />
+                  </div>
+                ))}
+              </div>
+            </article>
+
+            <article className="panel">
+              <div className="panel-header">
+                <div>
+                  <p className="eyebrow">Services</p>
+                  <h3>服务状态</h3>
+                </div>
+              </div>
+              <div className="list-stack">
+                {settings.services.map((service) => (
+                  <div className="list-row" key={service.name}>
+                    <div>
+                      <strong>{service.name}</strong>
+                      <p className="muted">{service.lastHeartbeat}</p>
+                    </div>
+                    <div className="inline-meta">
+                      <SourceChip
+                        dataSource={service.dataSource}
+                        dataSourceNote={service.dataSourceNote}
+                      />
+                      <StatusPill status={service.status} />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </article>
+          </section>
+
+          <section className="panel">
+            <div className="panel-header">
+              <div>
+                <p className="eyebrow">Configs</p>
+                <h3>系统配置</h3>
+              </div>
+            </div>
+            <div className="data-table">
+              <div className="data-table-head">
+                <span>键</span>
+                <span>名称</span>
+                <span>值</span>
+                <span>分类</span>
+                <span>来源</span>
+              </div>
+              {settings.systemConfigs.map((config) => (
+                <div className="data-table-row" key={config.key}>
+                  <div>
+                    <strong>{config.key}</strong>
+                  </div>
+                  <div>{config.label}</div>
+                  <div>{config.value}</div>
+                  <div>{config.category}</div>
+                  <div className="stack-right">
+                    <SourceChip
+                      dataSource={config.dataSource}
+                      dataSourceNote={config.dataSourceNote}
+                    />
+                    <span className="muted">{config.editable ? "editable" : "readonly"}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </section>
+        </div>
+      )}
+    </PageState>
   );
 }
