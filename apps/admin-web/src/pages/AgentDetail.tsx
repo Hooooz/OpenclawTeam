@@ -24,6 +24,7 @@ import { mockAgentDetail } from "@/data/mock-agents";
 import {
   collectMockNotes,
   fetchControlCenterAgentDetail,
+  takeMockItems,
   toMockProvenance,
   withMockProvenance,
   type AgentDetail as AgentDetailRecord,
@@ -34,14 +35,14 @@ function buildFallbackAgent(agentId: string): AgentDetailRecord {
     ...mockAgentDetail,
     id: agentId,
     ...toMockProvenance("数字员工详情接口暂不可用，当前展示演示员工档案。"),
-    skills: withMockProvenance(mockAgentDetail.skills, "Skill 绑定当前使用演示数据"),
-    knowledgeSources: withMockProvenance(mockAgentDetail.knowledgeSources, "知识摘要当前使用演示聚合"),
-    schedules: withMockProvenance(mockAgentDetail.schedules, "定时任务列表当前使用演示数据"),
+    skills: withMockProvenance(takeMockItems(mockAgentDetail.skills), "Skill 绑定当前使用演示数据，仅保留 1 条样例"),
+    knowledgeSources: withMockProvenance(takeMockItems(mockAgentDetail.knowledgeSources), "知识摘要当前使用演示聚合，仅保留 1 条样例"),
+    schedules: withMockProvenance(takeMockItems(mockAgentDetail.schedules), "定时任务列表当前使用演示数据，仅保留 1 条样例"),
     recentRuns: withMockProvenance(
-      mockAgentDetail.recentRuns as Array<{ id: string; taskName: string; status: AgentDetailRecord["recentRuns"][number]["status"]; time: string; duration: string }>,
-      "工作记录当前使用演示数据",
+      takeMockItems(mockAgentDetail.recentRuns) as Array<{ id: string; taskName: string; status: AgentDetailRecord["recentRuns"][number]["status"]; time: string; duration: string }>,
+      "工作记录当前使用演示数据，仅保留 1 条样例",
     ),
-    auditLog: withMockProvenance(mockAgentDetail.auditLog, "审计记录当前使用演示数据"),
+    auditLog: withMockProvenance(takeMockItems(mockAgentDetail.auditLog), "审计记录当前使用演示数据，仅保留 1 条样例"),
   };
 }
 

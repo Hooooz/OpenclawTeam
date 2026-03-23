@@ -12,6 +12,7 @@ import { cn } from "@/lib/utils";
 import {
   collectMockNotes,
   fetchControlCenterRunDetail,
+  takeMockItems,
   toMockProvenance,
   withMockProvenance,
   type RunDetail as RunDetailRecord,
@@ -37,9 +38,10 @@ function buildFallbackRun(runId: string): RunDetailRecord {
     outputSummary: mockRunDetail.outputResult || "—",
     sourcePlatform: "系统",
     ...toMockProvenance("运行详情接口暂不可用，当前展示演示记录。"),
-    steps: withMockProvenance(mockRunDetail.steps, "执行步骤当前使用演示数据"),
-    skillCalls: withMockProvenance(mockRunDetail.skillCalls, "Skill 调用当前使用演示数据"),
-    audit: withMockProvenance(mockRunDetail.audit, "审计信息当前使用演示数据"),
+    steps: withMockProvenance(takeMockItems(mockRunDetail.steps), "执行步骤当前使用演示数据，仅保留 1 条样例"),
+    skillCalls: withMockProvenance(takeMockItems(mockRunDetail.skillCalls), "Skill 调用当前使用演示数据，仅保留 1 条样例"),
+    logs: takeMockItems(mockRunDetail.logs),
+    audit: withMockProvenance(takeMockItems(mockRunDetail.audit), "审计信息当前使用演示数据，仅保留 1 条样例"),
   };
 }
 

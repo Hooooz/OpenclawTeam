@@ -15,13 +15,14 @@ import { mockAgentList } from "@/data/mock-agents";
 import {
   collectMockNotes,
   fetchControlCenterAgents,
+  takeMockItems,
   type AgentListItem,
   withMockProvenance,
 } from "@/lib/control-center-api";
 
 const fallbackAgents = withMockProvenance(
-  mockAgentList,
-  "数字员工列表接口暂不可用，当前展示演示员工数据。",
+  takeMockItems(mockAgentList),
+  "数字员工列表接口暂不可用，当前展示 1 条演示员工数据。",
 ) as AgentListItem[];
 
 export default function Agents() {

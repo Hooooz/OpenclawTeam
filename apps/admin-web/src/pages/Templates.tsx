@@ -1,5 +1,7 @@
 import { useState } from "react";
 import { DashboardLayout } from "@/components/DashboardLayout";
+import { DataSourceBadge } from "@/components/DataSourceBadge";
+import { MockDataNotice } from "@/components/MockDataNotice";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { StatusBadge } from "@/components/dashboard/StatusBadge";
@@ -7,6 +9,7 @@ import { mockTemplateList } from "@/data/mock-templates";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Plus, Search, Filter, Play, Eye } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { takeMockItems, withMockProvenance } from "@/lib/control-center-api";
 
 const tplStatusMap: Record<string, { variant: any; label: string }> = {
   active: { variant: "running", label: "启用" },
@@ -17,8 +20,9 @@ const tplStatusMap: Record<string, { variant: any; label: string }> = {
 export default function Templates() {
   const [statusFilter, setStatusFilter] = useState("all");
   const [search, setSearch] = useState("");
+  const templates = withMockProvenance(takeMockItems(mockTemplateList), "任务模板当前仅提供 1 条演示数据样例。");
 
-  const filtered = mockTemplateList.filter((t) => {
+  const filtered = templates.filter((t) => {
     if (statusFilter !== "all" && t.status !== statusFilter) return false;
     if (search && !t.name.includes(search) && !t.scene.includes(search)) return false;
     return true;
@@ -30,10 +34,12 @@ export default function Templates() {
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-lg font-semibold text-foreground">任务模板</h1>
-            <p className="text-xs text-muted-foreground mt-0.5">共 {mockTemplateList.length} 个模板，{mockTemplateList.filter(t => t.status === "active").length} 个可用</p>
+            <p className="text-xs text-muted-foreground mt-0.5">共 {templates.length} 个模板样例，{templates.filter(t => t.status === "active").length} 个可用</p>
           </div>
           <Button size="sm" className="gap-1.5 text-xs"><Plus className="h-3.5 w-3.5" /> 新建模板</Button>
         </div>
+
+        <MockDataNotice notes={["任务模板当前仅保留 1 条 mock 样例，并已标记为 MOCK。"]} />
 
         <div className="flex items-center gap-3">
           <div className="relative flex-1 max-w-sm">
@@ -75,7 +81,10 @@ export default function Templates() {
                   <TableRow key={t.id}>
                     <TableCell>
                       <div>
-                        <span className="text-sm font-medium text-foreground">{t.name}</span>
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm font-medium text-foreground">{t.name}</span>
+                          <DataSourceBadge item={t} className="px-1.5 py-0 text-[9px]" />
+                        </div>
                         <p className="text-xs text-muted-foreground mt-0.5 max-w-[250px] truncate">{t.description}</p>
                       </div>
                     </TableCell>

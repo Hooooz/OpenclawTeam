@@ -1,4 +1,6 @@
 import { DashboardLayout } from "@/components/DashboardLayout";
+import { DataSourceBadge } from "@/components/DataSourceBadge";
+import { MockDataNotice } from "@/components/MockDataNotice";
 import { StatusBadge } from "@/components/dashboard/StatusBadge";
 import { mockSkillDetail } from "@/data/mock-skills";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -6,8 +8,18 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Button } from "@/components/ui/button";
 import { ArrowLeft, Pencil } from "lucide-react";
 import { Link } from "react-router-dom";
+import { takeMockItems, toMockProvenance, withMockProvenance } from "@/lib/control-center-api";
 
-const s = mockSkillDetail;
+const s = {
+  ...mockSkillDetail,
+  ...toMockProvenance("Skill 详情当前仅提供 1 条演示档案样例。"),
+  inputSchema: takeMockItems(mockSkillDetail.inputSchema),
+  outputSchema: takeMockItems(mockSkillDetail.outputSchema),
+  boundAgents: withMockProvenance(takeMockItems(mockSkillDetail.boundAgents), "使用范围当前仅保留 1 条 mock 样例。"),
+  recentCalls: withMockProvenance(takeMockItems(mockSkillDetail.recentCalls), "最近调用当前仅保留 1 条 mock 样例。"),
+  versions: takeMockItems(mockSkillDetail.versions),
+  permissions: takeMockItems(mockSkillDetail.permissions),
+};
 
 export default function SkillDetail() {
   return (
@@ -23,11 +35,14 @@ export default function SkillDetail() {
               <span className="text-xs font-mono text-muted-foreground">{s.version}</span>
               <StatusBadge variant="running" label="启用" />
               <StatusBadge variant={s.riskLevel} label={s.riskLevel === "low" ? "低风险" : s.riskLevel === "medium" ? "中风险" : "高风险"} />
+              <DataSourceBadge item={s} />
             </div>
             <Button variant="outline" size="sm" className="gap-1.5 text-xs"><Pencil className="h-3.5 w-3.5" /> 编辑</Button>
           </div>
           <p className="text-sm text-muted-foreground mt-1">{s.description}</p>
         </div>
+
+        <MockDataNotice notes={["Skill 详情当前仅保留每个板块 1 条 mock 样例，并已标记为 MOCK。"]} />
 
         <div className="grid grid-cols-4 gap-3">
           {[
@@ -105,7 +120,12 @@ export default function SkillDetail() {
                 <TableBody>
                   {s.boundAgents.map((a) => (
                     <TableRow key={a.id}>
-                      <TableCell className="text-sm font-medium">{a.name}</TableCell>
+                      <TableCell className="text-sm font-medium">
+                        <div className="flex items-center gap-2">
+                          <span>{a.name}</span>
+                          <DataSourceBadge item={a} className="px-1.5 py-0 text-[9px]" />
+                        </div>
+                      </TableCell>
                       <TableCell><StatusBadge variant={a.status as any} /></TableCell>
                     </TableRow>
                   ))}
@@ -126,7 +146,12 @@ export default function SkillDetail() {
                 <TableBody>
                   {s.recentCalls.map((c) => (
                     <TableRow key={c.id}>
-                      <TableCell className="text-sm">{c.agentName}</TableCell>
+                      <TableCell className="text-sm">
+                        <div className="flex items-center gap-2">
+                          <span>{c.agentName}</span>
+                          <DataSourceBadge item={c} className="px-1.5 py-0 text-[9px]" />
+                        </div>
+                      </TableCell>
                       <TableCell><StatusBadge variant={c.result as any} /></TableCell>
                       <TableCell className="text-xs tabular-nums text-muted-foreground">{c.time}</TableCell>
                       <TableCell className="text-xs tabular-nums text-muted-foreground text-right">{c.duration}</TableCell>

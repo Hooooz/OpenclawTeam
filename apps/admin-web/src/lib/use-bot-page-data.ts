@@ -8,6 +8,7 @@ import {
   fetchControlCenterAgentDetail,
   fetchControlCenterRuns,
   fetchControlCenterSettings,
+  takeMockItems,
   toMockProvenance,
   withMockProvenance,
   type AgentDetail,
@@ -20,36 +21,36 @@ function buildFallbackAgent(agentId: string): AgentDetail {
     ...mockAgentDetail,
     id: agentId,
     ...toMockProvenance("数字员工运行面接口暂不可用，当前展示演示员工档案。"),
-    skills: withMockProvenance(mockAgentDetail.skills, "Skill 绑定当前使用演示数据"),
-    knowledgeSources: withMockProvenance(mockAgentDetail.knowledgeSources, "知识摘要当前使用演示聚合"),
-    schedules: withMockProvenance(mockAgentDetail.schedules, "定时任务列表当前使用演示数据"),
+    skills: withMockProvenance(takeMockItems(mockAgentDetail.skills), "Skill 绑定当前使用演示数据，仅保留 1 条样例"),
+    knowledgeSources: withMockProvenance(takeMockItems(mockAgentDetail.knowledgeSources), "知识摘要当前使用演示聚合，仅保留 1 条样例"),
+    schedules: withMockProvenance(takeMockItems(mockAgentDetail.schedules), "定时任务列表当前使用演示数据，仅保留 1 条样例"),
     recentRuns: withMockProvenance(
-      mockAgentDetail.recentRuns as Array<{
+      takeMockItems(mockAgentDetail.recentRuns) as Array<{
         id: string;
         taskName: string;
         status: AgentDetail["recentRuns"][number]["status"];
         time: string;
         duration: string;
       }>,
-      "工作记录当前使用演示数据",
+      "工作记录当前使用演示数据，仅保留 1 条样例",
     ),
-    auditLog: withMockProvenance(mockAgentDetail.auditLog, "审计记录当前使用演示数据"),
+    auditLog: withMockProvenance(takeMockItems(mockAgentDetail.auditLog), "审计记录当前使用演示数据，仅保留 1 条样例"),
   };
 }
 
 const fallbackRuns = withMockProvenance(
-  mockRunList,
-  "Bot 运行记录接口暂不可用，当前展示演示会话与工作记录。",
+  takeMockItems(mockRunList),
+  "Bot 运行记录接口暂不可用，当前展示 1 条演示会话与工作记录。",
 ) as RunListItem[];
 
 const fallbackSettings: SettingsData = {
   deployInfo: {
     ...mockDeployInfo,
-    ...toMockProvenance("部署信息当前使用演示数据。"),
-    ports: withMockProvenance(mockDeployInfo.ports, "端口信息当前使用演示数据"),
+    ...toMockProvenance("部署信息当前使用演示数据，仅保留 1 条样例。"),
+    ports: withMockProvenance(takeMockItems(mockDeployInfo.ports), "端口信息当前使用演示数据，仅保留 1 条样例"),
   },
-  services: withMockProvenance(mockServices, "服务健康卡片当前使用演示数据"),
-  systemConfigs: withMockProvenance(mockSystemConfigs, "系统配置当前使用演示数据"),
+  services: withMockProvenance(takeMockItems(mockServices), "服务健康卡片当前使用演示数据，仅保留 1 条样例"),
+  systemConfigs: withMockProvenance(takeMockItems(mockSystemConfigs), "系统配置当前使用演示数据，仅保留 1 条样例"),
 };
 
 export function useBotPageData(agentId: string) {

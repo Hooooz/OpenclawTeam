@@ -236,6 +236,10 @@ export function withMockProvenance<T extends object>(
   }));
 }
 
+export function takeMockItems<T>(items: T[], count = 1) {
+  return items.slice(0, Math.max(count, 0));
+}
+
 export function collectMockNotes(items: Array<Partial<Provenance> | null | undefined>) {
   return [...new Set(items.map((item) => item?.dataSourceNote?.trim()).filter(Boolean) as string[])];
 }

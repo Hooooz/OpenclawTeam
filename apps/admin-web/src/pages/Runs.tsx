@@ -14,6 +14,7 @@ import { mockRunList } from "@/data/mock-runs";
 import {
   collectMockNotes,
   fetchControlCenterRuns,
+  takeMockItems,
   type RunListItem,
   withMockProvenance,
 } from "@/lib/control-center-api";
@@ -26,8 +27,8 @@ const triggerLabel: Record<string, string> = {
 };
 
 const fallbackRuns = withMockProvenance(
-  mockRunList,
-  "对话与工作记录接口暂不可用，当前展示演示记录。",
+  takeMockItems(mockRunList),
+  "对话与工作记录接口暂不可用，当前展示 1 条演示记录。",
 ) as RunListItem[];
 
 export default function Runs() {

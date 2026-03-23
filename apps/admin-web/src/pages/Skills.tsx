@@ -1,5 +1,7 @@
 import { useState } from "react";
 import { DashboardLayout } from "@/components/DashboardLayout";
+import { DataSourceBadge } from "@/components/DataSourceBadge";
+import { MockDataNotice } from "@/components/MockDataNotice";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { StatusBadge } from "@/components/dashboard/StatusBadge";
@@ -8,6 +10,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Plus, Search, Filter, Eye } from "lucide-react";
 import { Link } from "react-router-dom";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { takeMockItems, withMockProvenance } from "@/lib/control-center-api";
 
 const riskBadge = (level: string) => {
   const map: Record<string, { variant: any; label: string }> = {
@@ -27,8 +30,9 @@ const statusMap: Record<string, { variant: any; label: string }> = {
 export default function Skills() {
   const [statusFilter, setStatusFilter] = useState("all");
   const [search, setSearch] = useState("");
+  const skills = withMockProvenance(takeMockItems(mockSkillList), "Skill 注册中心当前仅提供 1 条演示数据样例。");
 
-  const filtered = mockSkillList.filter((s) => {
+  const filtered = skills.filter((s) => {
     if (statusFilter !== "all" && s.status !== statusFilter) return false;
     if (search && !s.name.includes(search) && !s.category.includes(search)) return false;
     return true;
@@ -40,10 +44,12 @@ export default function Skills() {
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-lg font-semibold text-foreground">Skill 注册中心</h1>
-            <p className="text-xs text-muted-foreground mt-0.5">共 {mockSkillList.length} 个 Skill，{mockSkillList.filter(s => s.status === "active").length} 个启用中</p>
+            <p className="text-xs text-muted-foreground mt-0.5">共 {skills.length} 个 Skill 样例，{skills.filter(s => s.status === "active").length} 个启用中</p>
           </div>
           <Button size="sm" className="gap-1.5 text-xs"><Plus className="h-3.5 w-3.5" /> 新建 Skill</Button>
         </div>
+
+        <MockDataNotice notes={["Skill 注册中心当前仅保留 1 条 mock 样例，并已标记为 MOCK。"]} />
 
         <div className="flex items-center gap-3">
           <div className="relative flex-1 max-w-sm">
@@ -86,9 +92,12 @@ export default function Skills() {
                 const risk = riskBadge(s.riskLevel);
                 return (
                   <TableRow key={s.id}>
-                    <TableCell>
-                      <Link to={`/skills/${s.id}`} className="text-sm font-medium text-foreground hover:text-primary transition-colors">{s.name}</Link>
-                    </TableCell>
+                  <TableCell>
+                      <div className="flex items-center gap-2">
+                        <Link to={`/skills/${s.id}`} className="text-sm font-medium text-foreground hover:text-primary transition-colors">{s.name}</Link>
+                        <DataSourceBadge item={s} className="px-1.5 py-0 text-[9px]" />
+                      </div>
+                  </TableCell>
                     <TableCell className="text-xs text-muted-foreground">{s.category}</TableCell>
                     <TableCell className="text-xs font-mono text-muted-foreground">{s.version}</TableCell>
                     <TableCell><StatusBadge variant={st.variant} label={st.label} /></TableCell>

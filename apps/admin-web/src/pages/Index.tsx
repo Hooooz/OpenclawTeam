@@ -14,6 +14,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import {
   collectMockNotes,
   fetchControlCenterDashboard,
+  takeMockItems,
   type DashboardData,
   withMockProvenance,
 } from "@/lib/control-center-api";
@@ -27,12 +28,12 @@ import {
 } from "@/data/mock-dashboard";
 
 const fallbackDashboard: DashboardData = {
-  metrics: withMockProvenance(mockMetrics, "控制台指标当前使用演示数据"),
-  services: withMockProvenance(mockServices, "服务健康卡片当前使用演示数据"),
-  risks: withMockProvenance(mockRisks, "风险提示当前使用演示数据"),
-  agents: withMockProvenance(mockAgents, "重点数字员工当前使用演示数据"),
-  runs: withMockProvenance(mockRuns, "最近对话与工作记录当前使用演示数据"),
-  schedules: withMockProvenance(mockSchedules, "定时任务守护状态当前使用演示数据"),
+  metrics: withMockProvenance(takeMockItems(mockMetrics), "控制台指标当前使用演示数据，仅保留 1 条样例"),
+  services: withMockProvenance(takeMockItems(mockServices), "服务健康卡片当前使用演示数据，仅保留 1 条样例"),
+  risks: withMockProvenance(takeMockItems(mockRisks), "风险提示当前使用演示数据，仅保留 1 条样例"),
+  agents: withMockProvenance(takeMockItems(mockAgents), "重点数字员工当前使用演示数据，仅保留 1 条样例"),
+  runs: withMockProvenance(takeMockItems(mockRuns), "最近对话与工作记录当前使用演示数据，仅保留 1 条样例"),
+  schedules: withMockProvenance(takeMockItems(mockSchedules), "定时任务守护状态当前使用演示数据，仅保留 1 条样例"),
   generatedAt: "MOCK",
 };
 

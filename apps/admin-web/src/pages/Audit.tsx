@@ -1,8 +1,11 @@
 import { DashboardLayout } from "@/components/DashboardLayout";
+import { DataSourceBadge } from "@/components/DataSourceBadge";
+import { MockDataNotice } from "@/components/MockDataNotice";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Input } from "@/components/ui/input";
 import { Search } from "lucide-react";
 import { useState } from "react";
+import { takeMockItems, withMockProvenance } from "@/lib/control-center-api";
 
 const mockAuditLog = [
   { id: "1", time: "2025-03-22 14:32:00", user: "李明", role: "超级管理员", action: "触发运行", target: "客服工单处理", detail: "手动触发工单分类-批次 #1847" },
@@ -19,8 +22,9 @@ const mockAuditLog = [
 
 export default function Audit() {
   const [search, setSearch] = useState("");
+  const auditLog = withMockProvenance(takeMockItems(mockAuditLog), "审计日志当前仅提供 1 条演示数据样例。");
 
-  const filtered = mockAuditLog.filter((a) => {
+  const filtered = auditLog.filter((a) => {
     if (!search) return true;
     return a.user.includes(search) || a.action.includes(search) || a.target.includes(search) || a.detail.includes(search);
   });
@@ -32,6 +36,8 @@ export default function Audit() {
           <h1 className="text-lg font-semibold text-foreground">审计日志</h1>
           <p className="text-xs text-muted-foreground mt-0.5">记录所有关键操作和系统事件</p>
         </div>
+
+        <MockDataNotice notes={["审计日志当前仅保留 1 条 mock 样例，并已标记为 MOCK。"]} />
 
         <div className="relative max-w-sm">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -54,7 +60,12 @@ export default function Audit() {
               {filtered.map((a) => (
                 <TableRow key={a.id}>
                   <TableCell className="text-xs tabular-nums text-muted-foreground font-mono whitespace-nowrap">{a.time}</TableCell>
-                  <TableCell className="text-sm font-medium">{a.user}</TableCell>
+                  <TableCell className="text-sm font-medium">
+                    <div className="flex items-center gap-2">
+                      <span>{a.user}</span>
+                      <DataSourceBadge item={a} className="px-1.5 py-0 text-[9px]" />
+                    </div>
+                  </TableCell>
                   <TableCell><span className="text-xs text-muted-foreground bg-muted rounded px-1.5 py-0.5">{a.role}</span></TableCell>
                   <TableCell className="text-sm">{a.action}</TableCell>
                   <TableCell className="text-sm text-foreground">{a.target}</TableCell>

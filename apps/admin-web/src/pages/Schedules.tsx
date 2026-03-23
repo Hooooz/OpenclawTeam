@@ -14,6 +14,7 @@ import { mockScheduleList } from "@/data/mock-schedules";
 import {
   collectMockNotes,
   fetchControlCenterSchedules,
+  takeMockItems,
   toMockProvenance,
   withMockProvenance,
   type ScheduleListItem,
@@ -26,8 +27,8 @@ const scheduleStatusMap: Record<string, { variant: "running" | "paused" | "error
 };
 
 const fallbackSchedules = withMockProvenance(
-  mockScheduleList,
-  "定时任务列表接口暂不可用，当前展示演示任务数据。",
+  takeMockItems(mockScheduleList),
+  "定时任务列表接口暂不可用，当前展示 1 条演示任务数据。",
 ) as ScheduleListItem[];
 
 export default function Schedules() {

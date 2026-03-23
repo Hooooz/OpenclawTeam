@@ -10,6 +10,7 @@ import { mockDeployInfo, mockSystemConfigs } from "@/data/mock-settings";
 import {
   collectMockNotes,
   fetchControlCenterSettings,
+  takeMockItems,
   toMockProvenance,
   withMockProvenance,
   type SettingsData,
@@ -18,11 +19,11 @@ import {
 const fallbackSettings: SettingsData = {
   deployInfo: {
     ...mockDeployInfo,
-    ...toMockProvenance("部署信息当前使用演示数据。"),
-    ports: withMockProvenance(mockDeployInfo.ports, "端口信息当前使用演示数据"),
+    ...toMockProvenance("部署信息当前使用演示数据，仅保留 1 条样例。"),
+    ports: withMockProvenance(takeMockItems(mockDeployInfo.ports), "端口信息当前使用演示数据，仅保留 1 条样例"),
   },
-  services: withMockProvenance(mockServices, "服务健康卡片当前使用演示数据"),
-  systemConfigs: withMockProvenance(mockSystemConfigs, "系统配置当前使用演示数据"),
+  services: withMockProvenance(takeMockItems(mockServices), "服务健康卡片当前使用演示数据，仅保留 1 条样例"),
+  systemConfigs: withMockProvenance(takeMockItems(mockSystemConfigs), "系统配置当前使用演示数据，仅保留 1 条样例"),
 };
 
 export default function Settings() {
