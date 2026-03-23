@@ -6,6 +6,7 @@ import { DashboardLayout } from "@/components/DashboardLayout";
 import { DataSourceBadge } from "@/components/DataSourceBadge";
 import { MockDataNotice } from "@/components/MockDataNotice";
 import { StatusBadge } from "@/components/dashboard/StatusBadge";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Progress } from "@/components/ui/progress";
@@ -105,12 +106,12 @@ export default function Agents() {
             <TableHeader>
               <TableRow className="hover:bg-transparent">
                 <TableHead className="text-xs">员工</TableHead>
-                <TableHead className="text-xs">座右铭</TableHead>
+                <TableHead className="text-xs">员工定位</TableHead>
                 <TableHead className="text-xs">状态</TableHead>
-                <TableHead className="text-xs">模型</TableHead>
-                <TableHead className="text-center text-xs">Skills</TableHead>
-                <TableHead className="text-center text-xs">知识源</TableHead>
-                <TableHead className="text-xs">最近工作</TableHead>
+                <TableHead className="text-xs">所在机器</TableHead>
+                <TableHead className="text-center text-xs">OpenClaw</TableHead>
+                <TableHead className="text-center text-xs">通道</TableHead>
+                <TableHead className="text-xs">记忆 / Skills</TableHead>
                 <TableHead className="text-xs">成功率</TableHead>
                 <TableHead className="text-center text-xs">操作</TableHead>
               </TableRow>
@@ -136,21 +137,37 @@ export default function Agents() {
                         <p className="mt-0.5 text-[10px] text-muted-foreground">
                           {agent.position} · {agent.department}
                         </p>
+                        <p className="mt-0.5 text-[10px] text-muted-foreground/80">{agent.role}</p>
                       </div>
                     </div>
                   </TableCell>
-                  <TableCell className="max-w-[160px] truncate text-xs italic text-muted-foreground">
-                    "{agent.motto}"
+                  <TableCell className="max-w-[220px] text-xs text-muted-foreground">
+                    <p className="truncate italic">"{agent.motto}"</p>
+                    <div className="mt-1 flex flex-wrap gap-1">
+                      {agent.specialties.slice(0, 2).map((tag) => (
+                        <Badge key={tag} variant="secondary" className="text-[10px]">
+                          {tag}
+                        </Badge>
+                      ))}
+                    </div>
                   </TableCell>
                   <TableCell>
                     <StatusBadge variant={agent.status} />
                   </TableCell>
-                  <TableCell className="text-xs font-mono text-muted-foreground">{agent.model}</TableCell>
-                  <TableCell className="text-center text-sm tabular-nums">{agent.skillCount}</TableCell>
-                  <TableCell className="text-center text-sm tabular-nums">{agent.knowledgeCount}</TableCell>
                   <TableCell>
-                    <div className="text-xs tabular-nums text-muted-foreground">{agent.lastRunTime}</div>
-                    {agent.lastRunStatus ? <StatusBadge variant={agent.lastRunStatus} className="mt-0.5" /> : null}
+                    <div className="text-xs font-medium text-foreground">{agent.machine.name}</div>
+                    <div className="mt-0.5 text-[10px] text-muted-foreground">
+                      {agent.machine.runtime}
+                    </div>
+                  </TableCell>
+                  <TableCell className="text-center text-sm tabular-nums">{agent.openclawCount}</TableCell>
+                  <TableCell className="text-center text-sm tabular-nums">{agent.channelCount}</TableCell>
+                  <TableCell>
+                    <div className="text-xs text-muted-foreground">记忆源 {agent.knowledgeCount}</div>
+                    <div className="mt-0.5 text-xs text-muted-foreground">Skills {agent.skillCount}</div>
+                    <div className="mt-0.5 text-[10px] tabular-nums text-muted-foreground">
+                      最近活跃 {agent.lastRunTime}
+                    </div>
                   </TableCell>
                   <TableCell>
                     <div className="flex min-w-[100px] items-center gap-2">

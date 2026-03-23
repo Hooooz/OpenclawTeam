@@ -37,6 +37,29 @@ export type AgentStatus = "running" | "idle" | "paused" | "error";
 export type RunStatus = "success" | "running" | "failed" | "cancelled";
 export type TriggerSource = "manual" | "timed-task" | "template" | "chat";
 
+export type MachineInfo = {
+  id: string;
+  name: string;
+  host: string;
+  runtime: string;
+  status: "healthy" | "degraded" | "down";
+} & Provenance;
+
+export type AgentChannel = {
+  id: string;
+  openclawAgentId: string;
+  name: string;
+  platform: string;
+  channelType: "私聊" | "群聊" | "系统";
+  status: AgentStatus;
+  sessionCount: number;
+  lastActive: string;
+  lastMessage: string;
+  successRate: number;
+  model: string;
+  alertCount: number;
+} & Provenance;
+
 export type DashboardAgentSummary = {
   id: string;
   name: string;
@@ -96,6 +119,9 @@ export type AgentListItem = {
   group: string;
   communicationStyle: string;
   specialties: string[];
+  machine: MachineInfo;
+  channelCount: number;
+  openclawCount: number;
 } & Provenance;
 
 export type AgentDetail = AgentListItem & {
@@ -106,6 +132,8 @@ export type AgentDetail = AgentListItem & {
   systemPrompt: string;
   behaviorRules: string[];
   outputStyle: string;
+  machine: MachineInfo;
+  channels: AgentChannel[];
   skills: Array<{ id: string; name: string; category: string; status: string } & Provenance>;
   knowledgeSources: Array<{ id: string; name: string; type: string; lastSync: string } & Provenance>;
   schedules: Array<{ id: string; name: string; cron: string; nextRun: string; enabled: boolean } & Provenance>;
@@ -119,6 +147,9 @@ export type RunListItem = {
   agentName: string;
   agentPosition: string;
   agentId: string;
+  channelId: string;
+  channelName: string;
+  channelType: "私聊" | "群聊" | "系统";
   triggerSource: TriggerSource;
   startTime: string;
   duration: string;

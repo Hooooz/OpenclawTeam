@@ -47,7 +47,7 @@ describe("control-center-api", () => {
         json: async () => ({
           ok: true,
           data: {
-            id: "wecom-dm-huangchuhao",
+            id: "employee-huangchuhao",
             name: "黄初号",
             position: "创始人助理",
             department: "总经办",
@@ -64,6 +64,16 @@ describe("control-center-api", () => {
             group: "企业微信",
             communicationStyle: "直接清晰",
             specialties: ["任务拆解", "优先级判断"],
+            machine: {
+              id: "machine-192-168-31-189",
+              name: "192.168.31.189",
+              host: "192.168.31.189",
+              runtime: "Windows 11 / OpenClaw Local",
+              status: "healthy",
+              dataSource: "live",
+            },
+            channelCount: 2,
+            openclawCount: 1,
             description: "对接老板私聊里的真实工作请求。",
             owner: "黄初豪",
             createdAt: "2026-03-20",
@@ -71,6 +81,23 @@ describe("control-center-api", () => {
             systemPrompt: "你是创始人助理。",
             behaviorRules: ["先收集上下文", "不确定就标出风险"],
             outputStyle: "简洁执行摘要",
+            channels: [
+              {
+                id: "channel-wecom-dm-huangchuhao",
+                openclawAgentId: "wecom-dm-huangchuhao",
+                name: "老板私聊",
+                platform: "企业微信",
+                channelType: "私聊",
+                status: "running",
+                sessionCount: 12,
+                lastActive: "刚刚",
+                lastMessage: "已整理今日工作优先级。",
+                successRate: 98,
+                model: "gpt-5.4",
+                alertCount: 0,
+                dataSource: "live",
+              },
+            ],
             skills: [{ id: "skill-1", name: "wecom", category: "integration", status: "active", dataSource: "live" }],
             knowledgeSources: [{ id: "knowledge-1", name: "老板偏好", type: "memory", lastSync: "刚刚", dataSource: "mock", dataSourceNote: "知识摘要仍使用演示聚合" }],
             schedules: [],
@@ -82,9 +109,11 @@ describe("control-center-api", () => {
       })),
     );
 
-    const agent = await fetchControlCenterAgentDetail("wecom-dm-huangchuhao");
+    const agent = await fetchControlCenterAgentDetail("employee-huangchuhao");
 
     expect(agent.name).toBe("黄初号");
+    expect(agent.channelCount).toBe(2);
+    expect(agent.channels[0]?.channelType).toBe("私聊");
     expect(collectMockNotes(agent.knowledgeSources)).toEqual(["知识摘要仍使用演示聚合"]);
   });
 

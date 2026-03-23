@@ -122,6 +122,29 @@ export type ControlCenterAgentStatus = "running" | "idle" | "paused" | "error";
 export type ControlCenterRunStatus = "success" | "running" | "failed" | "cancelled";
 export type ControlCenterTriggerSource = "manual" | "timed-task" | "template" | "chat";
 
+export type ControlCenterMachineInfo = {
+  id: string;
+  name: string;
+  host: string;
+  runtime: string;
+  status: "healthy" | "degraded" | "down";
+} & Provenance;
+
+export type ControlCenterAgentChannel = {
+  id: string;
+  openclawAgentId: string;
+  name: string;
+  platform: string;
+  channelType: "私聊" | "群聊" | "系统";
+  status: ControlCenterAgentStatus;
+  sessionCount: number;
+  lastActive: string;
+  lastMessage: string;
+  successRate: number;
+  model: string;
+  alertCount: number;
+} & Provenance;
+
 export type ControlCenterAgentListItem = {
   id: string;
   name: string;
@@ -140,6 +163,9 @@ export type ControlCenterAgentListItem = {
   group: string;
   communicationStyle: string;
   specialties: string[];
+  machine: ControlCenterMachineInfo;
+  channelCount: number;
+  openclawCount: number;
 } & Provenance;
 
 export type ControlCenterAgentDetail = ControlCenterAgentListItem & {
@@ -150,6 +176,8 @@ export type ControlCenterAgentDetail = ControlCenterAgentListItem & {
   systemPrompt: string;
   behaviorRules: string[];
   outputStyle: string;
+  machine: ControlCenterMachineInfo;
+  channels: ControlCenterAgentChannel[];
   skills: Array<{ id: string; name: string; category: string; status: string } & Provenance>;
   knowledgeSources: Array<{ id: string; name: string; type: string; lastSync: string } & Provenance>;
   schedules: Array<{ id: string; name: string; cron: string; nextRun: string; enabled: boolean } & Provenance>;
@@ -169,6 +197,9 @@ export type ControlCenterRunListItem = {
   agentName: string;
   agentPosition: string;
   agentId: string;
+  channelId: string;
+  channelName: string;
+  channelType: "私聊" | "群聊" | "系统";
   triggerSource: ControlCenterTriggerSource;
   startTime: string;
   duration: string;
@@ -322,6 +353,43 @@ type LiveAgentContext = {
   workspaceFiles: Array<{ name: string; path: string; modifiedAt: string }>;
   sessionEntries: Array<[string, SessionRecord]>;
   memoryConnected: boolean;
+  workspaceKey: string;
+  latestSurface: string;
+  latestChatType: "私聊" | "群聊" | "系统";
+  latestOriginLabel: string;
+};
+
+type LiveEmployeeContext = {
+  employeeId: string;
+  displayName: string;
+  position: string;
+  department: string;
+  group: string;
+  avatar: string;
+  motto: string;
+  communicationStyle: string;
+  role: string;
+  description: string;
+  workCreed: string;
+  status: ControlCenterAgentStatus;
+  model: string;
+  skillCount: number;
+  knowledgeCount: number;
+  lastRunTime: string;
+  lastRunStatus: ControlCenterRunStatus | null;
+  successRate: number;
+  specialties: string[];
+  mockFields: string[];
+  createdAt: string;
+  owner: string;
+  outputStyle: string;
+  behaviorRules: string[];
+  systemPrompt: string;
+  resolvedSkills: SessionSkill[];
+  workspaceFiles: Array<{ name: string; path: string; modifiedAt: string }>;
+  memoryConnected: boolean;
+  machine: ControlCenterMachineInfo;
+  channels: Array<LiveAgentContext>;
 };
 
 function defaultOpenClawHome() {
@@ -437,6 +505,26 @@ function humanizeDmName(agentId: string) {
 
 function humanizeGroupName(agentId: string) {
   return `群聊协作 ${agentId.slice(-6)}`;
+}
+
+function slugify(value: string) {
+  return value
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9\u4e00-\u9fa5]+/g, "-")
+    .replace(/^-+|-+$/g, "") || "employee";
+}
+
+function deriveChannelType(record: SessionRecord | undefined, agentId: string): "私聊" | "群聊" | "系统" {
+  if (record?.origin?.chatType === "group" || agentId.startsWith("wecom-group-")) {
+    return "群聊";
+  }
+
+  if (record?.origin?.chatType === "direct" || agentId.startsWith("wecom-dm-")) {
+    return "私聊";
+  }
+
+  return "系统";
 }
 
 function deriveAgentIdentity(agentId: string) {
@@ -741,6 +829,11 @@ function getPathCandidates(openclawHome: string, agentId: string, workspaceDir?:
   };
 }
 
+function toWorkspaceKey(agentId: string, workspaceCandidates: string[]) {
+  const candidate = workspaceCandidates[0] || agentId;
+  return path.normalize(candidate).toLowerCase();
+}
+
 async function readWorkspaceFiles(workspaceCandidates: string[]) {
   const fileNames = ["AGENTS.md", "IDENTITY.md", "SOUL.md", "USER.md", "BOOTSTRAP.md", "HEARTBEAT.md"];
   const found = [];
@@ -860,7 +953,11 @@ async function buildLiveAgentContext(
     resolvedSkills,
     workspaceFiles,
     sessionEntries,
-    memoryConnected
+    memoryConnected,
+    workspaceKey: toWorkspaceKey(agentId, pathCandidates.workspace),
+    latestSurface: mapSurfaceLabel(latestSession?.origin?.surface),
+    latestChatType: deriveChannelType(latestSession, agentId),
+    latestOriginLabel: latestSession?.origin?.label?.trim() || identity.displayName
   };
 }
 
@@ -876,9 +973,122 @@ async function defaultControlPlaneProvider() {
   return getDashboardSnapshot();
 }
 
-function buildAgentListItem(context: LiveAgentContext): ControlCenterAgentListItem {
+function buildMachineInfo(fallback: LegacyFallback): ControlCenterMachineInfo {
   return {
-    id: context.agentId,
+    id: `machine-${slugify(fallback.server.host)}`,
+    name: fallback.server.host,
+    host: fallback.server.host,
+    runtime: fallback.server.containerRuntime,
+    status: "healthy",
+    dataSource: "live"
+  };
+}
+
+function statusRank(status: ControlCenterAgentStatus) {
+  if (status === "error") return 4;
+  if (status === "running") return 3;
+  if (status === "idle") return 2;
+  return 1;
+}
+
+function pickPrimaryChannel(contexts: LiveAgentContext[]) {
+  return [...contexts].sort((left, right) => {
+    const leftScore = left.latestChatType === "私聊" ? 3 : left.latestChatType === "群聊" ? 2 : 1;
+    const rightScore = right.latestChatType === "私聊" ? 3 : right.latestChatType === "群聊" ? 2 : 1;
+    if (rightScore !== leftScore) {
+      return rightScore - leftScore;
+    }
+
+    return (right.sessionEntries[0]?.[1].updatedAt || 0) - (left.sessionEntries[0]?.[1].updatedAt || 0);
+  })[0]!;
+}
+
+function buildEmployeeContexts(contexts: LiveAgentContext[], fallback: LegacyFallback): LiveEmployeeContext[] {
+  const machine = buildMachineInfo(fallback);
+  const grouped = new Map<string, LiveAgentContext[]>();
+
+  contexts.forEach((context) => {
+    const existing = grouped.get(context.workspaceKey) || [];
+    existing.push(context);
+    grouped.set(context.workspaceKey, existing);
+  });
+
+  return Array.from(grouped.values()).map((channelContexts) => {
+    const primary = pickPrimaryChannel(channelContexts);
+    const skillNames = new Set<string>();
+    const mockFields = new Set<string>();
+    let latestContext = primary;
+    let status = primary.status;
+    let weightedSuccess = 0;
+    let totalChannels = 0;
+
+    channelContexts.forEach((context) => {
+      context.specialties.forEach((name) => skillNames.add(name));
+      context.mockFields.forEach((field) => mockFields.add(field));
+      totalChannels += 1;
+      weightedSuccess += context.successRate;
+
+      const leftUpdated = latestContext.sessionEntries[0]?.[1].updatedAt || 0;
+      const rightUpdated = context.sessionEntries[0]?.[1].updatedAt || 0;
+      if (rightUpdated > leftUpdated) {
+        latestContext = context;
+      }
+
+      if (statusRank(context.status) > statusRank(status)) {
+        status = context.status;
+      }
+    });
+
+    const resolvedSkills = Array.from(
+      new Map(
+        channelContexts
+          .flatMap((context) => context.resolvedSkills)
+          .map((skill) => [`${skill.name || ""}:${skill.source || ""}`, skill]),
+      ).values(),
+    );
+
+    return {
+      employeeId: `employee-${slugify(primary.displayName)}`,
+      displayName: primary.displayName,
+      position: primary.position,
+      department: primary.department,
+      group: primary.group,
+      avatar: primary.avatar,
+      motto: primary.motto,
+      communicationStyle: primary.communicationStyle,
+      role: primary.role,
+      description: primary.description,
+      workCreed: primary.workCreed,
+      status,
+      model: primary.model,
+      skillCount: resolvedSkills.length || primary.skillCount,
+      knowledgeCount: Math.max(...channelContexts.map((context) => context.knowledgeCount), 0),
+      lastRunTime: latestContext.lastRunTime,
+      lastRunStatus: latestContext.lastRunStatus,
+      successRate: Math.round((weightedSuccess / Math.max(totalChannels, 1)) * 10) / 10,
+      specialties: Array.from(skillNames).slice(0, 6),
+      mockFields: Array.from(mockFields),
+      createdAt: primary.createdAt,
+      owner: primary.owner,
+      outputStyle: primary.outputStyle,
+      behaviorRules: primary.behaviorRules,
+      systemPrompt: primary.systemPrompt,
+      resolvedSkills,
+      workspaceFiles: primary.workspaceFiles,
+      memoryConnected: primary.memoryConnected,
+      machine,
+      channels: channelContexts.sort((left, right) => {
+        const leftUpdated = left.sessionEntries[0]?.[1].updatedAt || 0;
+        const rightUpdated = right.sessionEntries[0]?.[1].updatedAt || 0;
+        return rightUpdated - leftUpdated;
+      })
+    };
+  });
+}
+
+function buildAgentListItem(context: LiveEmployeeContext): ControlCenterAgentListItem {
+  return {
+    id: context.employeeId,
     name: context.displayName,
     position: context.position,
     department: context.department,
@@ -895,16 +1105,20 @@ function buildAgentListItem(context: LiveAgentContext): ControlCenterAgentListIt
     group: context.group,
     communicationStyle: context.communicationStyle,
     specialties: context.specialties,
+    machine: context.machine,
+    channelCount: context.channels.length,
+    openclawCount: 1,
     dataSource: "live",
     mockFields: context.mockFields
   };
 }
 
-async function buildLiveRuns(contexts: LiveAgentContext[], openclawHome: string, now: Date) {
+async function buildLiveRuns(employees: LiveEmployeeContext[], openclawHome: string, now: Date) {
   const runs: ControlCenterRunListItem[] = [];
 
-  for (const context of contexts) {
-    for (const [, sessionRecord] of context.sessionEntries) {
+  for (const employee of employees) {
+    for (const context of employee.channels) {
+      for (const [, sessionRecord] of context.sessionEntries) {
       const sessionFilePath = path.join(
         openclawHome,
         "agents",
@@ -925,9 +1139,12 @@ async function buildLiveRuns(contexts: LiveAgentContext[], openclawHome: string,
       runs.push({
         id: sessionRecord.sessionId || `${context.agentId}-${Math.random().toString(36).slice(2, 8)}`,
         runId: (sessionRecord.sessionId || "session").toUpperCase(),
-        agentName: context.displayName,
-        agentPosition: context.position,
-        agentId: context.agentId,
+        agentName: employee.displayName,
+        agentPosition: employee.position,
+        agentId: employee.employeeId,
+        channelId: context.agentId,
+        channelName: context.latestOriginLabel || context.displayName,
+        channelType: context.latestChatType,
         triggerSource: deriveTriggerSource(sessionRecord),
         startTime: formatDateTime(startTime),
         duration: formatDuration(startTime, endTime),
@@ -941,6 +1158,7 @@ async function buildLiveRuns(contexts: LiveAgentContext[], openclawHome: string,
         sourcePlatform: mapSurfaceLabel(sessionRecord.origin?.surface),
         dataSource: "live"
       });
+    }
     }
   }
 
@@ -960,6 +1178,9 @@ function buildFallbackRuns(snapshot: LegacyFallback): ControlCenterRunListItem[]
     agentName: run.agentName,
     agentPosition: "控制面存量任务",
     agentId: run.agentName,
+    channelId: "mock-channel",
+    channelName: "控制面示例通道",
+    channelType: "系统",
     triggerSource: run.triggerType === "schedule" ? "timed-task" : "manual",
     startTime: run.startedAt,
     duration: "—",
@@ -1195,30 +1416,35 @@ export function createControlCenterService(options: ControlCenterServiceOptions 
       controlPlaneProvider()
     ]);
     const liveAgents = await loadLiveAgents(openclawHome, config, now);
+    const liveEmployees = buildEmployeeContexts(liveAgents, fallback);
     return {
       now,
       config,
       status,
       fallback,
-      liveAgents
+      liveAgents,
+      liveEmployees
     };
   }
 
   return {
     async listAgents(): Promise<ControlCenterAgentListItem[]> {
-      const { liveAgents } = await loadContext();
-      return liveAgents.map((agent) => buildAgentListItem(agent));
+      const { liveEmployees } = await loadContext();
+      return liveEmployees.map((agent) => buildAgentListItem(agent));
     },
 
     async getAgentDetail(agentId: string): Promise<ControlCenterAgentDetail | null> {
-      const { liveAgents, fallback } = await loadContext();
-      const context = liveAgents.find((agent) => agent.agentId === agentId);
+      const { liveEmployees, fallback } = await loadContext();
+      const context = liveEmployees.find((agent) => agent.employeeId === agentId);
 
       if (!context) {
         return null;
       }
 
-      const schedules = (await this.listSchedules()).filter((schedule) => schedule.agentId === agentId);
+      const channelIds = new Set(context.channels.map((channel) => channel.agentId));
+      const schedules = (await this.listSchedules()).filter(
+        (schedule) => schedule.agentId === agentId || channelIds.has(schedule.agentId)
+      );
       const runs = (await this.listRuns()).filter((run) => run.agentId === agentId).slice(0, 5);
 
       return {
@@ -1230,6 +1456,23 @@ export function createControlCenterService(options: ControlCenterServiceOptions 
         systemPrompt: context.systemPrompt,
         behaviorRules: context.behaviorRules,
         outputStyle: context.outputStyle,
+        machine: context.machine,
+        channels: context.channels.map((channel) => ({
+          id: `channel-${channel.agentId}`,
+          openclawAgentId: channel.agentId,
+          name: channel.latestOriginLabel || channel.displayName,
+          platform: channel.latestSurface,
+          channelType: channel.latestChatType,
+          status: channel.status,
+          sessionCount: channel.sessionEntries.length,
+          lastActive: channel.lastRunTime,
+          lastMessage: channel.role,
+          successRate: channel.successRate,
+          model: channel.model,
+          alertCount: channel.status === "error" ? 1 : 0,
+          dataSource: "live",
+          mockFields: channel.mockFields
+        })),
         skills: context.resolvedSkills.map((skill, index) => ({
           id: `${agentId}-skill-${index + 1}`,
           name: skill.name || `Skill ${index + 1}`,
@@ -1298,8 +1541,8 @@ export function createControlCenterService(options: ControlCenterServiceOptions 
     },
 
     async listRuns(): Promise<ControlCenterRunListItem[]> {
-      const { liveAgents, fallback, now } = await loadContext();
-      const liveRuns = await buildLiveRuns(liveAgents, openclawHome, now);
+      const { liveEmployees, fallback, now } = await loadContext();
+      const liveRuns = await buildLiveRuns(liveEmployees, openclawHome, now);
       const fallbackRuns = buildFallbackRuns(fallback);
       return [...liveRuns, ...fallbackRuns].sort((left, right) => right.startTime.localeCompare(left.startTime));
     },

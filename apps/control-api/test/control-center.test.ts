@@ -72,7 +72,7 @@ async function createFixture() {
         },
         workspace: "C:\\Users\\Administrator\\.openclaw\\workspace"
       },
-      list: [{ id: "main" }, { id: "wecom-dm-huangchuhao" }]
+      list: [{ id: "main" }, { id: "wecom-dm-huangchuhao" }, { id: "wecom-group-demo-01" }]
     },
     gateway: {
       port: 18789,
@@ -182,6 +182,65 @@ async function createFixture() {
     "# AGENTS\n你是黄楚浩的企业微信数字助理，负责整理工作请求、安排优先级并沉淀行动项。"
   );
 
+  await writeJson(path.join(openclawHome, "agents", "wecom-group-demo-01", "sessions", "sessions.json"), {
+    "agent:wecom-group-demo-01:group:project": {
+      sessionId: "session-group-1",
+      updatedAt: Date.parse("2026-03-23T02:10:00.000Z"),
+      chatType: "group",
+      abortedLastRun: false,
+      origin: {
+        label: "Project Group",
+        provider: "wecom",
+        surface: "wecom",
+        chatType: "group"
+      },
+      sessionFile:
+        "C:\\Users\\Administrator\\.openclaw\\agents\\wecom-group-demo-01\\sessions\\session-group-1.jsonl",
+      modelProvider: "openai-codex",
+      model: "gpt-5.3-codex",
+      skillsSnapshot: {
+        skills: [{ name: "feishu-doc" }],
+        resolvedSkills: [
+          {
+            name: "feishu-doc",
+            description: "Feishu document operations",
+            source: "live"
+          }
+        ]
+      },
+      systemPromptReport: {
+        workspaceDir: "C:\\Users\\Administrator\\.openclaw\\workspace-wecom-dm-huangchuhao"
+      }
+    }
+  });
+
+  await writeText(
+    path.join(openclawHome, "agents", "wecom-group-demo-01", "sessions", "session-group-1.jsonl"),
+    [
+      JSON.stringify({
+        type: "session",
+        id: "session-group-1",
+        timestamp: "2026-03-23T02:05:00.000Z"
+      }),
+      JSON.stringify({
+        type: "message",
+        timestamp: "2026-03-23T02:06:00.000Z",
+        message: {
+          role: "user",
+          content: [{ type: "text", text: "群里同步一下今天的排期进展。" }]
+        }
+      }),
+      JSON.stringify({
+        type: "message",
+        timestamp: "2026-03-23T02:10:00.000Z",
+        message: {
+          role: "assistant",
+          content: [{ type: "text", text: "已同步今日排期：接口联调、页面验收、部署复核。" }]
+        }
+      })
+    ].join("\n")
+  );
+
   const fallback: ControlPlaneFallback = {
     schedules: [
       {
@@ -228,7 +287,7 @@ async function createFixture() {
   return { tempDir, openclawHome, fallback };
 }
 
-test("listAgents maps live OpenClaw agents into employee-style records with provenance", async () => {
+test("listAgents aggregates live OpenClaw channels into employee-style records with provenance", async () => {
   const { tempDir, openclawHome, fallback } = await createFixture();
 
   try {
@@ -240,17 +299,44 @@ test("listAgents maps live OpenClaw agents into employee-style records with prov
     });
 
     const agents = await service.listAgents();
-    const liveAgent = agents.find((item: { id: string }) => item.id === "wecom-dm-huangchuhao");
+    const liveAgent = agents.find((item: { id: string }) => item.id === "employee-huangchuhao");
 
     assert.ok(liveAgent);
     assert.equal(liveAgent.dataSource, "live");
     assert.equal(liveAgent.skillCount, 2);
     assert.equal(liveAgent.knowledgeCount, 1);
     assert.equal(liveAgent.status, "running");
+    assert.equal(liveAgent.channelCount, 2);
+    assert.equal(liveAgent.machine.name, "192.168.31.189");
     assert.match(liveAgent.role, /企业微信|工作请求/);
     assert.ok(Array.isArray(liveAgent.mockFields));
     assert.ok(liveAgent.mockFields.includes("position"));
     assert.ok(liveAgent.mockFields.includes("motto"));
+  } finally {
+    await rm(tempDir, { recursive: true, force: true });
+  }
+});
+
+test("getAgentDetail returns employee profile with channels nested underneath", async () => {
+  const { tempDir, openclawHome, fallback } = await createFixture();
+
+  try {
+    const { createControlCenterService } = await loadControlCenterModule();
+    const service = createControlCenterService({
+      openclawHome,
+      controlPlaneProvider: async () => fallback,
+      now: () => new Date("2026-03-23T02:20:00.000Z")
+    });
+
+    const agent = await service.getAgentDetail("employee-huangchuhao");
+
+    assert.ok(agent);
+    assert.equal(agent.id, "employee-huangchuhao");
+    assert.equal(agent.channels.length, 2);
+    assert.equal(agent.channels[0]?.platform, "企业微信");
+    assert.equal(agent.channels[0]?.channelType, "私聊");
+    assert.equal(agent.channels[1]?.channelType, "群聊");
+    assert.equal(agent.machine.host, "192.168.31.189");
   } finally {
     await rm(tempDir, { recursive: true, force: true });
   }
@@ -268,10 +354,11 @@ test("listRuns turns live session history into conversation work records", async
     });
 
     const runs = await service.listRuns();
-    const run = runs.find((item: { agentId: string }) => item.agentId === "wecom-dm-huangchuhao");
+    const run = runs.find((item: { agentId: string; channelId: string }) => item.channelId === "wecom-dm-huangchuhao");
 
     assert.ok(run);
     assert.equal(run.dataSource, "live");
+    assert.equal(run.agentId, "employee-huangchuhao");
     assert.equal(run.triggerSource, "chat");
     assert.equal(run.sourcePlatform, "企业微信");
     assert.match(run.conversationTopic, /整理今天的待办/);
