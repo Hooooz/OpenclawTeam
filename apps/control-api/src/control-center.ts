@@ -1007,38 +1007,101 @@ function statusRank(status: ControlCenterAgentStatus) {
   return 1;
 }
 
-function buildEmployeeContext(context: LiveAgentContext, fallback: LegacyFallback): LiveEmployeeContext {
+function latestContextTimestamp(context: LiveAgentContext) {
+  return Math.max(0, ...context.sessionEntries.map(([, record]) => record.updatedAt || 0));
+}
+
+function compareContextsForEmployee(left: LiveAgentContext, right: LiveAgentContext) {
+  if (left.displayNameMock !== right.displayNameMock) {
+    return left.displayNameMock ? 1 : -1;
+  }
+
+  if (left.memoryConnected !== right.memoryConnected) {
+    return left.memoryConnected ? -1 : 1;
+  }
+
+  const typeDiff = sessionChannelPriority(right.latestChatType) - sessionChannelPriority(left.latestChatType);
+  if (typeDiff !== 0) {
+    return typeDiff;
+  }
+
+  const sessionDiff = right.sessionEntries.length - left.sessionEntries.length;
+  if (sessionDiff !== 0) {
+    return sessionDiff;
+  }
+
+  return latestContextTimestamp(right) - latestContextTimestamp(left);
+}
+
+function uniqueValues(values: string[]) {
+  return Array.from(new Set(values.filter(Boolean)));
+}
+
+function buildEmployeeContext(contexts: LiveAgentContext[], fallback: LegacyFallback): LiveEmployeeContext {
+  const primary = [...contexts].sort(compareContextsForEmployee)[0];
+  if (!primary) {
+    throw new Error("Cannot build employee context from empty OpenClaw contexts.");
+  }
+
+  const latestContext = [...contexts].sort(
+    (left, right) => latestContextTimestamp(right) - latestContextTimestamp(left)
+  )[0] || primary;
+  const totalSessionCount = Math.max(
+    contexts.reduce((sum, context) => sum + Math.max(context.sessionEntries.length, 1), 0),
+    1
+  );
+  const weightedSuccessRate =
+    contexts.reduce((sum, context) => sum + context.successRate * Math.max(context.sessionEntries.length, 1), 0) /
+    totalSessionCount;
+  const mergedWorkspaceFiles = Array.from(
+    new Map(
+      contexts
+        .flatMap((context) => context.workspaceFiles)
+        .map((file) => [file.path, file] as const)
+    ).values()
+  ).sort((left, right) => right.modifiedAt.localeCompare(left.modifiedAt));
+
   return {
-    employeeId: toEmployeeId(context),
-    displayName: context.displayName,
-    position: context.position,
-    department: context.department,
-    group: context.group,
-    avatar: context.avatar,
-    motto: context.motto,
-    communicationStyle: context.communicationStyle,
-    role: context.role,
-    description: context.description,
-    workCreed: context.workCreed,
-    status: context.status,
-    model: context.model,
-    skillCount: context.skillCount,
-    knowledgeCount: context.knowledgeCount,
-    lastRunTime: context.lastRunTime,
-    lastRunStatus: context.lastRunStatus,
-    successRate: context.successRate,
-    specialties: context.specialties,
-    mockFields: context.mockFields,
-    createdAt: context.createdAt,
-    owner: context.owner,
-    outputStyle: context.outputStyle,
-    behaviorRules: context.behaviorRules,
-    systemPrompt: context.systemPrompt,
-    resolvedSkills: context.resolvedSkills,
-    workspaceFiles: context.workspaceFiles,
-    memoryConnected: context.memoryConnected,
+    employeeId: toEmployeeId(primary),
+    displayName: primary.displayName,
+    position: primary.position,
+    department: primary.department,
+    group: primary.group,
+    avatar: primary.avatar,
+    motto: primary.motto,
+    communicationStyle: primary.communicationStyle,
+    role: primary.role,
+    description: primary.description,
+    workCreed: primary.workCreed,
+    status: [...contexts]
+      .sort((left, right) => statusRank(right.status) - statusRank(left.status))[0]
+      ?.status || primary.status,
+    model: primary.model,
+    skillCount: uniqueValues(
+      contexts.flatMap((context) => context.resolvedSkills.map((skill) => skill.name || ""))
+    ).length,
+    knowledgeCount: contexts.some((context) => context.memoryConnected) ? 1 : 0,
+    lastRunTime: latestContext.lastRunTime,
+    lastRunStatus: latestContext.lastRunStatus,
+    successRate: Math.round(weightedSuccessRate * 10) / 10,
+    specialties: uniqueValues(contexts.flatMap((context) => context.specialties)).slice(0, 6),
+    mockFields: uniqueValues(contexts.flatMap((context) => context.mockFields)),
+    createdAt: mergedWorkspaceFiles[0]?.modifiedAt || primary.createdAt,
+    owner: primary.owner,
+    outputStyle: primary.outputStyle,
+    behaviorRules: uniqueValues(contexts.flatMap((context) => context.behaviorRules)).slice(0, 8),
+    systemPrompt: primary.systemPrompt,
+    resolvedSkills: Array.from(
+      new Map(
+        contexts
+          .flatMap((context) => context.resolvedSkills)
+          .map((skill) => [skill.name || `${skill.source || "skill"}-unknown`, skill] as const)
+      ).values()
+    ),
+    workspaceFiles: mergedWorkspaceFiles,
+    memoryConnected: contexts.some((context) => context.memoryConnected),
     machine: buildMachineInfo(fallback),
-    channels: [context]
+    channels: contexts
   };
 }
 
@@ -1062,7 +1125,10 @@ function buildAgentListItem(context: LiveEmployeeContext): ControlCenterAgentLis
     communicationStyle: context.communicationStyle,
     specialties: context.specialties,
     machine: context.machine,
-    channelCount: Math.max(context.channels[0]?.sessionEntries.length || 0, 1),
+    channelCount: Math.max(
+      context.channels.reduce((sum, channel) => sum + channel.sessionEntries.length, 0),
+      1
+    ),
     openclawCount: 1,
     dataSource: "live",
     mockFields: context.mockFields
@@ -1117,12 +1183,13 @@ function deriveChannelPlatform(agent: LiveAgentContext, sessionKey: string, reco
 }
 
 async function buildDetailChannels(
-  context: LiveAgentContext,
+  employee: LiveEmployeeContext,
   openclawHome: string,
   now: Date
 ): Promise<ControlCenterAgentChannel[]> {
   const channels = await Promise.all(
-    context.sessionEntries.map(async ([sessionKey, record]) => {
+    employee.channels.flatMap((context) =>
+      context.sessionEntries.map(async ([sessionKey, record]) => {
       const sessionFilePath = path.join(
         openclawHome,
         "agents",
@@ -1152,7 +1219,8 @@ async function buildDetailChannels(
         dataSource: "live" as const,
         mockFields: context.mockFields
       };
-    })
+      })
+    )
   );
 
   return channels.sort((left, right) => {
@@ -1169,49 +1237,52 @@ async function buildLiveRuns(employees: LiveEmployeeContext[], openclawHome: str
   const runs: ControlCenterRunListItem[] = [];
 
   for (const employee of employees) {
-    const context = employee.channels[0]!;
-    for (const [sessionKey, sessionRecord] of context.sessionEntries) {
-      const sessionFilePath = path.join(
-        openclawHome,
-        "agents",
-        context.agentId,
-        "sessions",
-        `${sessionRecord.sessionId || "session"}.jsonl`
-      );
-      const summary = await readSessionFileSummary(sessionFilePath);
-      const startTime = summary.firstTimestamp || (sessionRecord.updatedAt ? new Date(sessionRecord.updatedAt) : null);
-      const endTime = summary.lastTimestamp || (sessionRecord.updatedAt ? new Date(sessionRecord.updatedAt) : startTime);
-      const status = deriveRunStatus(sessionRecord, now);
-      const topic = cleanConversationText(summary.firstUserText || `${context.displayName} 对话线程`, 60);
-      const outputSummary = cleanConversationText(
-        summary.lastAssistantText || "最近一轮输出还未沉淀到可读摘要。",
-        80
-      );
-      const channelType = deriveSessionChannelType(sessionKey, sessionRecord, context.agentId);
-      const platform = deriveChannelPlatform(context, sessionKey, sessionRecord);
+    for (const context of employee.channels) {
+      for (const [sessionKey, sessionRecord] of context.sessionEntries) {
+        const sessionFilePath = path.join(
+          openclawHome,
+          "agents",
+          context.agentId,
+          "sessions",
+          `${sessionRecord.sessionId || "session"}.jsonl`
+        );
+        const summary = await readSessionFileSummary(sessionFilePath);
+        const startTime =
+          summary.firstTimestamp || (sessionRecord.updatedAt ? new Date(sessionRecord.updatedAt) : null);
+        const endTime =
+          summary.lastTimestamp || (sessionRecord.updatedAt ? new Date(sessionRecord.updatedAt) : startTime);
+        const status = deriveRunStatus(sessionRecord, now);
+        const topic = cleanConversationText(summary.firstUserText || `${context.displayName} 对话线程`, 60);
+        const outputSummary = cleanConversationText(
+          summary.lastAssistantText || "最近一轮输出还未沉淀到可读摘要。",
+          80
+        );
+        const channelType = deriveSessionChannelType(sessionKey, sessionRecord, context.agentId);
+        const platform = deriveChannelPlatform(context, sessionKey, sessionRecord);
 
-      runs.push({
-        id: sessionRecord.sessionId || `${context.agentId}-${Math.random().toString(36).slice(2, 8)}`,
-        runId: (sessionRecord.sessionId || "session").toUpperCase(),
-        agentName: employee.displayName,
-        agentPosition: employee.position,
-        agentId: employee.employeeId,
-        channelId: toChannelId(context.agentId, sessionKey),
-        channelName: deriveChannelName(context, sessionKey, sessionRecord),
-        channelType,
-        triggerSource: deriveTriggerSource(sessionRecord),
-        startTime: formatDateTime(startTime),
-        duration: formatDuration(startTime, endTime),
-        status,
-        outputSummary,
-        traceId: `trace-${sessionRecord.sessionId || context.agentId}`,
-        taskName: `${platform}对话处理`,
-        conversationTopic: topic,
-        memorySummary: context.memoryConnected ? "已连接 OpenClaw memory" : "未接入独立记忆库",
-        versionDiff: "—",
-        sourcePlatform: platform,
-        dataSource: "live"
-      });
+        runs.push({
+          id: sessionRecord.sessionId || `${context.agentId}-${Math.random().toString(36).slice(2, 8)}`,
+          runId: (sessionRecord.sessionId || "session").toUpperCase(),
+          agentName: employee.displayName,
+          agentPosition: employee.position,
+          agentId: employee.employeeId,
+          channelId: toChannelId(context.agentId, sessionKey),
+          channelName: deriveChannelName(context, sessionKey, sessionRecord),
+          channelType,
+          triggerSource: deriveTriggerSource(sessionRecord),
+          startTime: formatDateTime(startTime),
+          duration: formatDuration(startTime, endTime),
+          status,
+          outputSummary,
+          traceId: `trace-${sessionRecord.sessionId || context.agentId}`,
+          taskName: `${platform}对话处理`,
+          conversationTopic: topic,
+          memorySummary: context.memoryConnected ? "已连接 OpenClaw memory" : "未接入独立记忆库",
+          versionDiff: "—",
+          sourcePlatform: platform,
+          dataSource: "live"
+        });
+      }
     }
   }
 
@@ -1469,7 +1540,7 @@ export function createControlCenterService(options: ControlCenterServiceOptions 
       controlPlaneProvider()
     ]);
     const liveAgents = await loadLiveAgents(openclawHome, config, now);
-    const liveEmployees = liveAgents.map((agent) => buildEmployeeContext(agent, fallback));
+    const liveEmployees = liveAgents.length > 0 ? [buildEmployeeContext(liveAgents, fallback)] : [];
     return {
       now,
       config,
@@ -1494,10 +1565,11 @@ export function createControlCenterService(options: ControlCenterServiceOptions 
         return null;
       }
 
-      const liveAgent = context.channels[0]!;
-      const detailChannels = await buildDetailChannels(liveAgent, openclawHome, nowProvider());
+      const primaryAgent = context.channels[0]!;
+      const detailChannels = await buildDetailChannels(context, openclawHome, nowProvider());
+      const relatedAgentIds = new Set([agentId, ...context.channels.map((channel) => channel.agentId)]);
       const schedules = (await this.listSchedules()).filter(
-        (schedule) => schedule.agentId === agentId || schedule.agentId === liveAgent.agentId
+        (schedule) => relatedAgentIds.has(schedule.agentId)
       );
       const runs = (await this.listRuns()).filter((run) => run.agentId === agentId).slice(0, 5);
 
@@ -1519,26 +1591,32 @@ export function createControlCenterService(options: ControlCenterServiceOptions 
           status: "active",
           dataSource: "live"
         })),
-        knowledgeSources: [
-          ...(context.memoryConnected
-            ? [
-                {
-                  id: `${agentId}-memory`,
-                  name: `${liveAgent.agentId}.sqlite`,
-                  type: "memory",
-                  lastSync: context.lastRunTime,
-                  dataSource: "live" as const
-                }
-              ]
-            : []),
-          ...context.workspaceFiles.map((file) => ({
-            id: `${agentId}-${file.name}`,
-            name: file.name,
-            type: "workspace",
-            lastSync: file.modifiedAt,
-            dataSource: "live" as const
-          }))
-        ],
+        knowledgeSources: Array.from(
+          new Map(
+            [
+              ...context.channels.flatMap((channel) =>
+                channel.memoryConnected
+                  ? [
+                      {
+                        id: `${agentId}-${channel.agentId}-memory`,
+                        name: `${channel.agentId}.sqlite`,
+                        type: "memory",
+                        lastSync: context.lastRunTime,
+                        dataSource: "live" as const
+                      }
+                    ]
+                  : []
+              ),
+              ...context.workspaceFiles.map((file) => ({
+                id: `${agentId}-${file.name}`,
+                name: file.name,
+                type: "workspace",
+                lastSync: file.modifiedAt,
+                dataSource: "live" as const
+              }))
+            ].map((item) => [item.id, item] as const)
+          ).values()
+        ),
         schedules: schedules.map((schedule) => ({
           id: schedule.id,
           name: schedule.name,

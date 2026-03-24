@@ -342,7 +342,7 @@ async function createFixture() {
   return { tempDir, openclawHome, fallback };
 }
 
-test("listAgents treats each OpenClaw suite as one employee and counts session channels underneath", async () => {
+test("listAgents collapses machine-level OpenClaw suites into one business employee", async () => {
   const { tempDir, openclawHome, fallback } = await createFixture();
 
   try {
@@ -361,20 +361,20 @@ test("listAgents treats each OpenClaw suite as one employee and counts session c
     assert.equal(liveAgent.skillCount, 2);
     assert.equal(liveAgent.knowledgeCount, 1);
     assert.equal(liveAgent.status, "running");
-    assert.equal(liveAgent.channelCount, 2);
+    assert.equal(liveAgent.channelCount, 3);
     assert.equal(liveAgent.openclawCount, 1);
     assert.equal(liveAgent.machine.name, "192.168.31.189");
     assert.match(liveAgent.role, /企业微信|工作请求/);
     assert.ok(Array.isArray(liveAgent.mockFields));
     assert.ok(liveAgent.mockFields.includes("position"));
     assert.ok(liveAgent.mockFields.includes("motto"));
-    assert.equal(agents.length, 3);
+    assert.equal(agents.length, 1);
   } finally {
     await rm(tempDir, { recursive: true, force: true });
   }
 });
 
-test("getAgentDetail returns session-derived channels nested under one employee", async () => {
+test("getAgentDetail returns all live channels nested under one employee", async () => {
   const { tempDir, openclawHome, fallback } = await createFixture();
 
   try {
@@ -389,11 +389,15 @@ test("getAgentDetail returns session-derived channels nested under one employee"
 
     assert.ok(agent);
     assert.equal(agent.id, "employee-huangchuhao");
-    assert.equal(agent.channels.length, 2);
+    assert.equal(agent.channels.length, 3);
+    assert.equal(agent.channelCount, 3);
     assert.equal(agent.channels[0]?.platform, "企业微信");
     assert.equal(agent.channels[0]?.channelType, "私聊");
-    assert.equal(agent.channels[1]?.channelType, "系统");
-    assert.match(agent.channels[1]?.name || "", /主控|主线程/);
+    assert.equal(agent.channels[1]?.channelType, "群聊");
+    assert.equal(agent.channels[1]?.platform, "企业微信");
+    assert.match(agent.channels[1]?.name || "", /Project Group/);
+    assert.equal(agent.channels[2]?.channelType, "系统");
+    assert.match(agent.channels[2]?.name || "", /主控|主线程/);
     assert.equal(agent.machine.host, "192.168.31.189");
   } finally {
     await rm(tempDir, { recursive: true, force: true });
