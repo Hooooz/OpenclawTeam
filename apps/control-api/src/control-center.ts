@@ -527,6 +527,18 @@ function deriveChannelType(record: SessionRecord | undefined, agentId: string): 
   return "系统";
 }
 
+function deriveSessionChannelType(
+  sessionKey: string,
+  record: SessionRecord | undefined,
+  agentId: string
+): "私聊" | "群聊" | "系统" {
+  if (sessionKey.endsWith(":main")) {
+    return "系统";
+  }
+
+  return deriveChannelType(record, agentId);
+}
+
 function deriveAgentIdentity(agentId: string) {
   if (agentId === "main" || agentId === "codex") {
     return {
@@ -984,6 +996,10 @@ function buildMachineInfo(fallback: LegacyFallback): ControlCenterMachineInfo {
   };
 }
 
+function toEmployeeId(context: LiveAgentContext) {
+  return `employee-${slugify(context.displayName)}`;
+}
+
 function statusRank(status: ControlCenterAgentStatus) {
   if (status === "error") return 4;
   if (status === "running") return 3;
@@ -991,99 +1007,39 @@ function statusRank(status: ControlCenterAgentStatus) {
   return 1;
 }
 
-function pickPrimaryChannel(contexts: LiveAgentContext[]) {
-  return [...contexts].sort((left, right) => {
-    const leftScore = left.latestChatType === "私聊" ? 3 : left.latestChatType === "群聊" ? 2 : 1;
-    const rightScore = right.latestChatType === "私聊" ? 3 : right.latestChatType === "群聊" ? 2 : 1;
-    if (rightScore !== leftScore) {
-      return rightScore - leftScore;
-    }
-
-    return (right.sessionEntries[0]?.[1].updatedAt || 0) - (left.sessionEntries[0]?.[1].updatedAt || 0);
-  })[0]!;
-}
-
-function buildEmployeeContexts(contexts: LiveAgentContext[], fallback: LegacyFallback): LiveEmployeeContext[] {
-  const machine = buildMachineInfo(fallback);
-  const grouped = new Map<string, LiveAgentContext[]>();
-
-  contexts.forEach((context) => {
-    const existing = grouped.get(context.workspaceKey) || [];
-    existing.push(context);
-    grouped.set(context.workspaceKey, existing);
-  });
-
-  return Array.from(grouped.values()).map((channelContexts) => {
-    const primary = pickPrimaryChannel(channelContexts);
-    const skillNames = new Set<string>();
-    const mockFields = new Set<string>();
-    let latestContext = primary;
-    let status = primary.status;
-    let weightedSuccess = 0;
-    let totalChannels = 0;
-
-    channelContexts.forEach((context) => {
-      context.specialties.forEach((name) => skillNames.add(name));
-      context.mockFields.forEach((field) => mockFields.add(field));
-      totalChannels += 1;
-      weightedSuccess += context.successRate;
-
-      const leftUpdated = latestContext.sessionEntries[0]?.[1].updatedAt || 0;
-      const rightUpdated = context.sessionEntries[0]?.[1].updatedAt || 0;
-      if (rightUpdated > leftUpdated) {
-        latestContext = context;
-      }
-
-      if (statusRank(context.status) > statusRank(status)) {
-        status = context.status;
-      }
-    });
-
-    const resolvedSkills = Array.from(
-      new Map(
-        channelContexts
-          .flatMap((context) => context.resolvedSkills)
-          .map((skill) => [`${skill.name || ""}:${skill.source || ""}`, skill]),
-      ).values(),
-    );
-
-    return {
-      employeeId: `employee-${slugify(primary.displayName)}`,
-      displayName: primary.displayName,
-      position: primary.position,
-      department: primary.department,
-      group: primary.group,
-      avatar: primary.avatar,
-      motto: primary.motto,
-      communicationStyle: primary.communicationStyle,
-      role: primary.role,
-      description: primary.description,
-      workCreed: primary.workCreed,
-      status,
-      model: primary.model,
-      skillCount: resolvedSkills.length || primary.skillCount,
-      knowledgeCount: Math.max(...channelContexts.map((context) => context.knowledgeCount), 0),
-      lastRunTime: latestContext.lastRunTime,
-      lastRunStatus: latestContext.lastRunStatus,
-      successRate: Math.round((weightedSuccess / Math.max(totalChannels, 1)) * 10) / 10,
-      specialties: Array.from(skillNames).slice(0, 6),
-      mockFields: Array.from(mockFields),
-      createdAt: primary.createdAt,
-      owner: primary.owner,
-      outputStyle: primary.outputStyle,
-      behaviorRules: primary.behaviorRules,
-      systemPrompt: primary.systemPrompt,
-      resolvedSkills,
-      workspaceFiles: primary.workspaceFiles,
-      memoryConnected: primary.memoryConnected,
-      machine,
-      channels: channelContexts.sort((left, right) => {
-        const leftUpdated = left.sessionEntries[0]?.[1].updatedAt || 0;
-        const rightUpdated = right.sessionEntries[0]?.[1].updatedAt || 0;
-        return rightUpdated - leftUpdated;
-      })
-    };
-  });
+function buildEmployeeContext(context: LiveAgentContext, fallback: LegacyFallback): LiveEmployeeContext {
+  return {
+    employeeId: toEmployeeId(context),
+    displayName: context.displayName,
+    position: context.position,
+    department: context.department,
+    group: context.group,
+    avatar: context.avatar,
+    motto: context.motto,
+    communicationStyle: context.communicationStyle,
+    role: context.role,
+    description: context.description,
+    workCreed: context.workCreed,
+    status: context.status,
+    model: context.model,
+    skillCount: context.skillCount,
+    knowledgeCount: context.knowledgeCount,
+    lastRunTime: context.lastRunTime,
+    lastRunStatus: context.lastRunStatus,
+    successRate: context.successRate,
+    specialties: context.specialties,
+    mockFields: context.mockFields,
+    createdAt: context.createdAt,
+    owner: context.owner,
+    outputStyle: context.outputStyle,
+    behaviorRules: context.behaviorRules,
+    systemPrompt: context.systemPrompt,
+    resolvedSkills: context.resolvedSkills,
+    workspaceFiles: context.workspaceFiles,
+    memoryConnected: context.memoryConnected,
+    machine: buildMachineInfo(fallback),
+    channels: [context]
+  };
 }
 
 function buildAgentListItem(context: LiveEmployeeContext): ControlCenterAgentListItem {
@@ -1106,19 +1062,115 @@ function buildAgentListItem(context: LiveEmployeeContext): ControlCenterAgentLis
     communicationStyle: context.communicationStyle,
     specialties: context.specialties,
     machine: context.machine,
-    channelCount: context.channels.length,
+    channelCount: Math.max(context.channels[0]?.sessionEntries.length || 0, 1),
     openclawCount: 1,
     dataSource: "live",
     mockFields: context.mockFields
   };
 }
 
+function sessionChannelPriority(channelType: "私聊" | "群聊" | "系统") {
+  if (channelType === "私聊") return 3;
+  if (channelType === "群聊") return 2;
+  return 1;
+}
+
+function toChannelId(agentId: string, sessionKey: string) {
+  return `channel-${slugify(`${agentId}-${sessionKey}`)}`;
+}
+
+function deriveChannelName(agent: LiveAgentContext, sessionKey: string, record: SessionRecord) {
+  const channelType = deriveChannelType(record, agent.agentId);
+  if (record.origin?.label?.trim()) {
+    return cleanConversationText(record.origin.label.trim(), 48);
+  }
+
+  if (sessionKey.endsWith(":main")) {
+    return "主控线程";
+  }
+
+  if (channelType === "私聊") {
+    return `${agent.displayName} 私聊入口`;
+  }
+
+  if (channelType === "群聊") {
+    return `${agent.displayName} 群聊入口`;
+  }
+
+  return `${agent.displayName} 系统入口`;
+}
+
+function deriveChannelPlatform(agent: LiveAgentContext, sessionKey: string, record: SessionRecord) {
+  if (record.origin?.surface) {
+    return mapSurfaceLabel(record.origin.surface);
+  }
+
+  if (sessionKey.endsWith(":main")) {
+    return "系统";
+  }
+
+  if (agent.agentId.startsWith("wecom-")) {
+    return "企业微信";
+  }
+
+  return "系统";
+}
+
+async function buildDetailChannels(
+  context: LiveAgentContext,
+  openclawHome: string,
+  now: Date
+): Promise<ControlCenterAgentChannel[]> {
+  const channels = await Promise.all(
+    context.sessionEntries.map(async ([sessionKey, record]) => {
+      const sessionFilePath = path.join(
+        openclawHome,
+        "agents",
+        context.agentId,
+        "sessions",
+        `${record.sessionId || "session"}.jsonl`
+      );
+      const summary = await readSessionFileSummary(sessionFilePath);
+      const channelType = deriveSessionChannelType(sessionKey, record, context.agentId);
+      const platform = deriveChannelPlatform(context, sessionKey, record);
+      const status = deriveAgentStatus(record.updatedAt, deriveRunStatus(record, now), now);
+
+      return {
+        id: toChannelId(context.agentId, sessionKey),
+        openclawAgentId: context.agentId,
+        name: deriveChannelName(context, sessionKey, record),
+        platform,
+        channelType,
+        status,
+        sessionCount: 1,
+        lastActive: record.updatedAt ? formatRelativeTime(record.updatedAt, now) : "—",
+        lastMessage:
+          cleanConversationText(summary.lastAssistantText || summary.firstUserText || context.role, 96) || context.role,
+        successRate: deriveRunStatus(record, now) === "failed" ? 0 : 100,
+        model: record.model || context.model,
+        alertCount: deriveRunStatus(record, now) === "failed" ? 1 : 0,
+        dataSource: "live" as const,
+        mockFields: context.mockFields
+      };
+    })
+  );
+
+  return channels.sort((left, right) => {
+    const priorityDiff = sessionChannelPriority(right.channelType) - sessionChannelPriority(left.channelType);
+    if (priorityDiff !== 0) {
+      return priorityDiff;
+    }
+
+    return right.lastActive.localeCompare(left.lastActive);
+  });
+}
+
 async function buildLiveRuns(employees: LiveEmployeeContext[], openclawHome: string, now: Date) {
   const runs: ControlCenterRunListItem[] = [];
 
   for (const employee of employees) {
-    for (const context of employee.channels) {
-      for (const [, sessionRecord] of context.sessionEntries) {
+    const context = employee.channels[0]!;
+    for (const [sessionKey, sessionRecord] of context.sessionEntries) {
       const sessionFilePath = path.join(
         openclawHome,
         "agents",
@@ -1135,6 +1187,8 @@ async function buildLiveRuns(employees: LiveEmployeeContext[], openclawHome: str
         summary.lastAssistantText || "最近一轮输出还未沉淀到可读摘要。",
         80
       );
+      const channelType = deriveSessionChannelType(sessionKey, sessionRecord, context.agentId);
+      const platform = deriveChannelPlatform(context, sessionKey, sessionRecord);
 
       runs.push({
         id: sessionRecord.sessionId || `${context.agentId}-${Math.random().toString(36).slice(2, 8)}`,
@@ -1142,23 +1196,22 @@ async function buildLiveRuns(employees: LiveEmployeeContext[], openclawHome: str
         agentName: employee.displayName,
         agentPosition: employee.position,
         agentId: employee.employeeId,
-        channelId: context.agentId,
-        channelName: context.latestOriginLabel || context.displayName,
-        channelType: context.latestChatType,
+        channelId: toChannelId(context.agentId, sessionKey),
+        channelName: deriveChannelName(context, sessionKey, sessionRecord),
+        channelType,
         triggerSource: deriveTriggerSource(sessionRecord),
         startTime: formatDateTime(startTime),
         duration: formatDuration(startTime, endTime),
         status,
         outputSummary,
         traceId: `trace-${sessionRecord.sessionId || context.agentId}`,
-        taskName: `${mapSurfaceLabel(sessionRecord.origin?.surface)}对话处理`,
+        taskName: `${platform}对话处理`,
         conversationTopic: topic,
         memorySummary: context.memoryConnected ? "已连接 OpenClaw memory" : "未接入独立记忆库",
         versionDiff: "—",
-        sourcePlatform: mapSurfaceLabel(sessionRecord.origin?.surface),
+        sourcePlatform: platform,
         dataSource: "live"
       });
-    }
     }
   }
 
@@ -1416,7 +1469,7 @@ export function createControlCenterService(options: ControlCenterServiceOptions 
       controlPlaneProvider()
     ]);
     const liveAgents = await loadLiveAgents(openclawHome, config, now);
-    const liveEmployees = buildEmployeeContexts(liveAgents, fallback);
+    const liveEmployees = liveAgents.map((agent) => buildEmployeeContext(agent, fallback));
     return {
       now,
       config,
@@ -1441,9 +1494,10 @@ export function createControlCenterService(options: ControlCenterServiceOptions 
         return null;
       }
 
-      const channelIds = new Set(context.channels.map((channel) => channel.agentId));
+      const liveAgent = context.channels[0]!;
+      const detailChannels = await buildDetailChannels(liveAgent, openclawHome, nowProvider());
       const schedules = (await this.listSchedules()).filter(
-        (schedule) => schedule.agentId === agentId || channelIds.has(schedule.agentId)
+        (schedule) => schedule.agentId === agentId || schedule.agentId === liveAgent.agentId
       );
       const runs = (await this.listRuns()).filter((run) => run.agentId === agentId).slice(0, 5);
 
@@ -1457,22 +1511,7 @@ export function createControlCenterService(options: ControlCenterServiceOptions 
         behaviorRules: context.behaviorRules,
         outputStyle: context.outputStyle,
         machine: context.machine,
-        channels: context.channels.map((channel) => ({
-          id: `channel-${channel.agentId}`,
-          openclawAgentId: channel.agentId,
-          name: channel.latestOriginLabel || channel.displayName,
-          platform: channel.latestSurface,
-          channelType: channel.latestChatType,
-          status: channel.status,
-          sessionCount: channel.sessionEntries.length,
-          lastActive: channel.lastRunTime,
-          lastMessage: channel.role,
-          successRate: channel.successRate,
-          model: channel.model,
-          alertCount: channel.status === "error" ? 1 : 0,
-          dataSource: "live",
-          mockFields: channel.mockFields
-        })),
+        channels: detailChannels,
         skills: context.resolvedSkills.map((skill, index) => ({
           id: `${agentId}-skill-${index + 1}`,
           name: skill.name || `Skill ${index + 1}`,
@@ -1485,7 +1524,7 @@ export function createControlCenterService(options: ControlCenterServiceOptions 
             ? [
                 {
                   id: `${agentId}-memory`,
-                  name: `${agentId}.sqlite`,
+                  name: `${liveAgent.agentId}.sqlite`,
                   type: "memory",
                   lastSync: context.lastRunTime,
                   dataSource: "live" as const

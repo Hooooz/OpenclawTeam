@@ -147,6 +147,34 @@ async function createFixture() {
       systemPromptReport: {
         workspaceDir: "C:\\Users\\Administrator\\.openclaw\\workspace-wecom-dm-huangchuhao"
       }
+    },
+    "agent:wecom-dm-huangchuhao:main": {
+      sessionId: "session-hch-main",
+      updatedAt: Date.parse("2026-03-23T02:18:00.000Z"),
+      chatType: "direct",
+      abortedLastRun: false,
+      sessionFile:
+        "C:\\Users\\Administrator\\.openclaw\\agents\\wecom-dm-huangchuhao\\sessions\\session-hch-main.jsonl",
+      modelProvider: "openai-codex",
+      model: "gpt-5.3-codex",
+      skillsSnapshot: {
+        skills: [{ name: "feishu-doc" }, { name: "coding-agent" }],
+        resolvedSkills: [
+          {
+            name: "feishu-doc",
+            description: "Feishu document operations",
+            source: "live"
+          },
+          {
+            name: "coding-agent",
+            description: "Delegate coding tasks",
+            source: "live"
+          }
+        ]
+      },
+      systemPromptReport: {
+        workspaceDir: "C:\\Users\\Administrator\\.openclaw\\workspace-wecom-dm-huangchuhao"
+      }
     }
   });
 
@@ -172,6 +200,33 @@ async function createFixture() {
         message: {
           role: "assistant",
           content: [{ type: "text", text: "已整理 3 项待办，最高优先级是今天的接口联调和部署验证。" }]
+        }
+      })
+    ].join("\n")
+  );
+
+  await writeText(
+    path.join(openclawHome, "agents", "wecom-dm-huangchuhao", "sessions", "session-hch-main.jsonl"),
+    [
+      JSON.stringify({
+        type: "session",
+        id: "session-hch-main",
+        timestamp: "2026-03-23T02:16:00.000Z"
+      }),
+      JSON.stringify({
+        type: "message",
+        timestamp: "2026-03-23T02:16:30.000Z",
+        message: {
+          role: "user",
+          content: [{ type: "text", text: "把今天的重点同步成主控线程摘要。" }]
+        }
+      }),
+      JSON.stringify({
+        type: "message",
+        timestamp: "2026-03-23T02:18:00.000Z",
+        message: {
+          role: "assistant",
+          content: [{ type: "text", text: "已汇总主控线程摘要，包含联调、验收和部署三项重点。" }]
         }
       })
     ].join("\n")
@@ -287,7 +342,7 @@ async function createFixture() {
   return { tempDir, openclawHome, fallback };
 }
 
-test("listAgents aggregates live OpenClaw channels into employee-style records with provenance", async () => {
+test("listAgents treats each OpenClaw suite as one employee and counts session channels underneath", async () => {
   const { tempDir, openclawHome, fallback } = await createFixture();
 
   try {
@@ -307,17 +362,19 @@ test("listAgents aggregates live OpenClaw channels into employee-style records w
     assert.equal(liveAgent.knowledgeCount, 1);
     assert.equal(liveAgent.status, "running");
     assert.equal(liveAgent.channelCount, 2);
+    assert.equal(liveAgent.openclawCount, 1);
     assert.equal(liveAgent.machine.name, "192.168.31.189");
     assert.match(liveAgent.role, /企业微信|工作请求/);
     assert.ok(Array.isArray(liveAgent.mockFields));
     assert.ok(liveAgent.mockFields.includes("position"));
     assert.ok(liveAgent.mockFields.includes("motto"));
+    assert.equal(agents.length, 3);
   } finally {
     await rm(tempDir, { recursive: true, force: true });
   }
 });
 
-test("getAgentDetail returns employee profile with channels nested underneath", async () => {
+test("getAgentDetail returns session-derived channels nested under one employee", async () => {
   const { tempDir, openclawHome, fallback } = await createFixture();
 
   try {
@@ -335,7 +392,8 @@ test("getAgentDetail returns employee profile with channels nested underneath", 
     assert.equal(agent.channels.length, 2);
     assert.equal(agent.channels[0]?.platform, "企业微信");
     assert.equal(agent.channels[0]?.channelType, "私聊");
-    assert.equal(agent.channels[1]?.channelType, "群聊");
+    assert.equal(agent.channels[1]?.channelType, "系统");
+    assert.match(agent.channels[1]?.name || "", /主控|主线程/);
     assert.equal(agent.machine.host, "192.168.31.189");
   } finally {
     await rm(tempDir, { recursive: true, force: true });
@@ -354,7 +412,10 @@ test("listRuns turns live session history into conversation work records", async
     });
 
     const runs = await service.listRuns();
-    const run = runs.find((item: { agentId: string; channelId: string }) => item.channelId === "wecom-dm-huangchuhao");
+    const run = runs.find(
+      (item: { agentId: string; triggerSource: string; channelType: string }) =>
+        item.agentId === "employee-huangchuhao" && item.triggerSource === "chat" && item.channelType === "私聊"
+    );
 
     assert.ok(run);
     assert.equal(run.dataSource, "live");
