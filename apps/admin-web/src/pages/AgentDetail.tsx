@@ -506,6 +506,32 @@ export default function AgentDetail() {
         </div>
 
         <div className="rounded-md border bg-card p-4 shadow-sm">
+          <div className="mb-3">
+            <h3 className="text-sm font-medium text-foreground">治理与配置</h3>
+            <p className="mt-0.5 text-xs text-muted-foreground">
+              这些项目不再占据主页面版面，点击后从右侧抽屉展开查看、编辑和保存。
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {(Object.keys(drawerMeta) as DrawerSection[]).map((section) => {
+              const meta = drawerMeta[section];
+              const Icon = meta.icon;
+              return (
+                <Button
+                  key={section}
+                  variant="outline"
+                  className="gap-1.5"
+                  onClick={() => setActiveDrawer(section)}
+                >
+                  <Icon className="h-4 w-4" />
+                  {meta.title}
+                </Button>
+              );
+            })}
+          </div>
+        </div>
+
+        <div className="rounded-md border bg-card p-4 shadow-sm">
           <div className="mb-3 flex items-center justify-between">
             <div>
               <h3 className="text-sm font-medium text-foreground">通道情况</h3>
@@ -569,32 +595,6 @@ export default function AgentDetail() {
                 ))}
               </TableBody>
             </Table>
-          </div>
-        </div>
-
-        <div className="rounded-md border bg-card p-4 shadow-sm">
-          <div className="mb-3">
-            <h3 className="text-sm font-medium text-foreground">治理与配置</h3>
-            <p className="mt-0.5 text-xs text-muted-foreground">
-              这些项目不再占据主页面版面，点击后从右侧抽屉展开查看、编辑和保存。
-            </p>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            {(Object.keys(drawerMeta) as DrawerSection[]).map((section) => {
-              const meta = drawerMeta[section];
-              const Icon = meta.icon;
-              return (
-                <Button
-                  key={section}
-                  variant="outline"
-                  className="gap-1.5"
-                  onClick={() => setActiveDrawer(section)}
-                >
-                  <Icon className="h-4 w-4" />
-                  {meta.title}
-                </Button>
-              );
-            })}
           </div>
         </div>
       </div>
