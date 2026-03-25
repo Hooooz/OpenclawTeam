@@ -11,6 +11,14 @@ import { RiskAlertList } from "@/components/dashboard/RiskAlertList";
 import { StatusBadge } from "@/components/dashboard/StatusBadge";
 import { SystemHealthCard } from "@/components/dashboard/SystemHealthCard";
 import { Button } from "@/components/ui/button";
+import {
+  ChartContainer,
+  ChartLegend,
+  ChartLegendContent,
+  ChartTooltip,
+  ChartTooltipContent,
+  type ChartConfig,
+} from "@/components/ui/chart";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import {
   collectMockNotes,
@@ -31,6 +39,18 @@ import {
   mockServices,
 } from "@/data/mock-dashboard";
 import { mockRunList } from "@/data/mock-runs";
+import { CartesianGrid, Line, LineChart, XAxis, YAxis } from "recharts";
+
+const weeklyChartConfig = {
+  tasks: {
+    label: "完成任务",
+    color: "hsl(var(--primary))",
+  },
+  files: {
+    label: "完成文件",
+    color: "hsl(var(--status-success))",
+  },
+} satisfies ChartConfig;
 
 const fallbackDashboard: DashboardData = {
   metrics: withMockProvenance(takeMockItems(mockMetrics), "控制台指标当前使用演示数据，仅保留 1 条样例"),
@@ -169,38 +189,56 @@ export default function Index() {
             <div className="mb-4 flex items-center justify-between">
               <div>
                 <h3 className="text-sm font-medium text-foreground">每周数据看板</h3>
-                <p className="mt-0.5 text-xs text-muted-foreground">最近 7 天的任务、文件与节约金额走势。</p>
+                <p className="mt-0.5 text-xs text-muted-foreground">最近 7 天任务与文件产出趋势，节约金额放在悬浮提示中查看。</p>
               </div>
             </div>
 
-            <div className="space-y-3">
-              {workbench.weekly.map((day) => {
-                const barHeight = Math.max(day.tasks * 18 + day.files * 10, 10);
-                return (
-                  <div key={day.dateKey} className="grid grid-cols-[56px_1fr_88px] items-center gap-3">
-                    <div>
-                      <p className="text-sm font-medium text-foreground">{day.dayLabel}</p>
-                      <p className="text-[10px] text-muted-foreground">{day.dateKey.slice(5)}</p>
-                    </div>
-                    <div className="rounded-md bg-muted/80 px-3 py-2">
-                      <div className="flex items-end gap-2">
-                        <div
-                          className="w-4 rounded-sm bg-primary/80"
-                          style={{ height: `${barHeight}px` }}
-                        />
-                        <div className="grid flex-1 grid-cols-3 gap-2 text-xs text-muted-foreground">
-                          <span>任务 {day.tasks}</span>
-                          <span>文件 {day.files}</span>
-                          <span>节约 ¥{day.savings}</span>
-                        </div>
-                      </div>
-                    </div>
-                    <div className="text-right">
-                      <DataSourceBadge item={day} className="px-1.5 py-0 text-[9px]" />
-                    </div>
-                  </div>
-                );
-              })}
+            <div className="rounded-md border bg-background/70 p-3">
+              <ChartContainer config={weeklyChartConfig} className="h-[260px] w-full">
+                <LineChart data={workbench.weekly} margin={{ top: 12, right: 12, left: -20, bottom: 0 }}>
+                  <CartesianGrid vertical={false} strokeDasharray="3 3" />
+                  <XAxis dataKey="dayLabel" tickLine={false} axisLine={false} />
+                  <YAxis allowDecimals={false} tickLine={false} axisLine={false} width={28} />
+                  <ChartTooltip
+                    cursor={false}
+                    content={
+                      <ChartTooltipContent
+                        indicator="line"
+                        formatter={(_, __, item) => {
+                          const value = Number(item.value || 0);
+                          const payload = item.payload as { savings?: number };
+                          return (
+                            <div className="flex min-w-[180px] items-center justify-between gap-4">
+                              <div className="space-y-0.5">
+                                <p className="text-foreground">{weeklyChartConfig[String(item.dataKey)]?.label || item.name}</p>
+                                <p className="text-[10px] text-muted-foreground">预计节约 ¥{payload.savings || 0}</p>
+                              </div>
+                              <span className="font-mono font-medium tabular-nums text-foreground">{value}</span>
+                            </div>
+                          );
+                        }}
+                      />
+                    }
+                  />
+                  <ChartLegend content={<ChartLegendContent />} />
+                  <Line
+                    type="monotone"
+                    dataKey="tasks"
+                    stroke="var(--color-tasks)"
+                    strokeWidth={3}
+                    dot={{ r: 3, fill: "var(--color-tasks)" }}
+                    activeDot={{ r: 5 }}
+                  />
+                  <Line
+                    type="monotone"
+                    dataKey="files"
+                    stroke="var(--color-files)"
+                    strokeWidth={2.5}
+                    dot={{ r: 3, fill: "var(--color-files)" }}
+                    activeDot={{ r: 5 }}
+                  />
+                </LineChart>
+              </ChartContainer>
             </div>
           </div>
         </div>
