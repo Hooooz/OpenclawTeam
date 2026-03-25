@@ -1,3 +1,4 @@
+import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { AlertCircle, ArrowRight, CalendarPlus, Plus, RefreshCw } from "lucide-react";
 import { Link } from "react-router-dom";
@@ -14,10 +15,13 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import {
   collectMockNotes,
   fetchControlCenterDashboard,
+  fetchControlCenterRuns,
   takeMockItems,
   type DashboardData,
+  type RunListItem,
   withMockProvenance,
 } from "@/lib/control-center-api";
+import { buildWorkbenchData } from "@/lib/dashboard-workbench";
 import {
   mockAgents,
   mockMetrics,
@@ -26,6 +30,7 @@ import {
   mockSchedules,
   mockServices,
 } from "@/data/mock-dashboard";
+import { mockRunList } from "@/data/mock-runs";
 
 const fallbackDashboard: DashboardData = {
   metrics: withMockProvenance(takeMockItems(mockMetrics), "控制台指标当前使用演示数据，仅保留 1 条样例"),
@@ -42,8 +47,17 @@ export default function Index() {
     queryKey: ["control-center", "dashboard"],
     queryFn: fetchControlCenterDashboard,
   });
+  const runsQuery = useQuery({
+    queryKey: ["control-center", "runs"],
+    queryFn: fetchControlCenterRuns,
+  });
 
   const dashboard = dashboardQuery.data ?? fallbackDashboard;
+  const runs = runsQuery.data ?? withMockProvenance(takeMockItems(mockRunList, 1), "工作记录接口暂不可用，当前展示 1 条演示记录。");
+  const workbench = useMemo(
+    () => buildWorkbenchData(runs as RunListItem[], new Date()),
+    [runs],
+  );
   const mockNotes = [
     ...collectMockNotes(dashboard.metrics),
     ...collectMockNotes(dashboard.services),
@@ -51,6 +65,13 @@ export default function Index() {
     ...collectMockNotes(dashboard.agents),
     ...collectMockNotes(dashboard.runs),
     ...collectMockNotes(dashboard.schedules),
+    ...collectMockNotes(runs),
+    ...collectMockNotes([
+      workbench.today.files,
+      workbench.today.savings,
+      ...workbench.feed,
+      ...workbench.weekly,
+    ]),
   ];
 
   const uniqueMockNotes = [...new Set(mockNotes)];
@@ -113,6 +134,77 @@ export default function Index() {
           ))}
         </div>
 
+        <div className="grid gap-4 xl:grid-cols-[1.35fr_1fr]">
+          <div className="rounded-md border bg-card p-5 shadow-sm">
+            <div className="mb-4 flex items-start justify-between gap-4">
+              <div>
+                <h3 className="text-sm font-medium text-foreground">数字员工核心看板</h3>
+                <p className="mt-0.5 text-xs text-muted-foreground">
+                  聚合今天的任务产出、文件交付和节约成本，作为数字员工控制台的第一优先指标。
+                </p>
+              </div>
+              <span className="rounded-full bg-muted px-2.5 py-1 text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
+                Weekly cockpit
+              </span>
+            </div>
+
+            <div className="grid gap-3 md:grid-cols-3">
+              {[workbench.today.tasks, workbench.today.files, workbench.today.savings].map((item) => (
+                <div key={item.label} className="rounded-md border bg-background/70 p-4">
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="text-xs uppercase tracking-wider text-muted-foreground">{item.label}</p>
+                    <DataSourceBadge item={item} className="px-1.5 py-0 text-[9px]" />
+                  </div>
+                  <p className="mt-3 text-3xl font-semibold tracking-tight text-foreground">
+                    {item.value}
+                    {item.unit ? <span className="ml-1 text-sm font-medium text-muted-foreground">{item.unit}</span> : null}
+                  </p>
+                  <p className="mt-2 text-xs text-muted-foreground">{item.note}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="rounded-md border bg-card p-5 shadow-sm">
+            <div className="mb-4 flex items-center justify-between">
+              <div>
+                <h3 className="text-sm font-medium text-foreground">每周数据看板</h3>
+                <p className="mt-0.5 text-xs text-muted-foreground">最近 7 天的任务、文件与节约金额走势。</p>
+              </div>
+            </div>
+
+            <div className="space-y-3">
+              {workbench.weekly.map((day) => {
+                const barHeight = Math.max(day.tasks * 18 + day.files * 10, 10);
+                return (
+                  <div key={day.dateKey} className="grid grid-cols-[56px_1fr_88px] items-center gap-3">
+                    <div>
+                      <p className="text-sm font-medium text-foreground">{day.dayLabel}</p>
+                      <p className="text-[10px] text-muted-foreground">{day.dateKey.slice(5)}</p>
+                    </div>
+                    <div className="rounded-md bg-muted/80 px-3 py-2">
+                      <div className="flex items-end gap-2">
+                        <div
+                          className="w-4 rounded-sm bg-primary/80"
+                          style={{ height: `${barHeight}px` }}
+                        />
+                        <div className="grid flex-1 grid-cols-3 gap-2 text-xs text-muted-foreground">
+                          <span>任务 {day.tasks}</span>
+                          <span>文件 {day.files}</span>
+                          <span>节约 ¥{day.savings}</span>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <DataSourceBadge item={day} className="px-1.5 py-0 text-[9px]" />
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+
         <div className="grid grid-cols-5 gap-4">
           <div className="col-span-2">
             <SystemHealthCard services={dashboard.services} />
@@ -161,43 +253,35 @@ export default function Index() {
               </Button>
             </div>
             <div className="overflow-hidden rounded-md border bg-card shadow-sm">
-              <Table>
-                <TableHeader>
-                  <TableRow className="hover:bg-transparent">
-                    <TableHead className="text-xs">任务名称</TableHead>
-                    <TableHead className="text-xs">数字员工</TableHead>
-                    <TableHead className="text-xs">状态</TableHead>
-                    <TableHead className="text-xs">开始时间</TableHead>
-                    <TableHead className="text-xs text-right">耗时</TableHead>
-                    <TableHead className="text-xs">记忆更新</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {dashboard.runs.map((run) => (
-                    <TableRow key={run.id}>
-                      <TableCell className="text-sm">
+              <div className="grid grid-cols-[88px_1fr] border-b bg-muted/40 px-4 py-2 text-[11px] uppercase tracking-wider text-muted-foreground">
+                <span>Live</span>
+                <span>实时工作流</span>
+              </div>
+              <div className="dashboard-feed-mask h-[360px] overflow-hidden">
+                <div className="dashboard-feed-track">
+                  {[...workbench.feed, ...workbench.feed].map((run, index) => (
+                    <div
+                      key={`${run.id}-${index}`}
+                      className="grid grid-cols-[88px_1fr] gap-3 border-b px-4 py-3 last:border-b-0"
+                    >
+                      <div className="space-y-1">
+                        <StatusBadge variant={run.status} />
+                        <p className="text-[11px] tabular-nums text-muted-foreground">{run.time}</p>
+                      </div>
+                      <div className="space-y-1.5">
                         <div className="flex items-center gap-2">
-                          <span>{run.taskName}</span>
+                          <p className="text-sm font-medium text-foreground">{run.title}</p>
                           <DataSourceBadge item={run} className="px-1.5 py-0 text-[9px]" />
                         </div>
-                      </TableCell>
-                      <TableCell className="text-sm text-muted-foreground">{run.agentName}</TableCell>
-                      <TableCell>
-                        <StatusBadge variant={run.status} />
-                      </TableCell>
-                      <TableCell className="text-sm tabular-nums text-muted-foreground">
-                        {run.startTime}
-                      </TableCell>
-                      <TableCell className="text-right text-sm tabular-nums text-muted-foreground">
-                        {run.duration}
-                      </TableCell>
-                      <TableCell className="max-w-[140px] truncate text-xs text-muted-foreground">
-                        {run.memorySummary || "—"}
-                      </TableCell>
-                    </TableRow>
+                        <p className="text-xs text-muted-foreground">
+                          {run.agentName} · {run.channelName} · {run.channelType}
+                        </p>
+                        <p className="text-sm text-muted-foreground">{run.summary}</p>
+                      </div>
+                    </div>
                   ))}
-                </TableBody>
-              </Table>
+                </div>
+              </div>
             </div>
           </div>
         </div>

@@ -102,3 +102,27 @@ All colors MUST be HSL.
     @apply bg-background text-foreground;
   }
 }
+
+@layer utilities {
+  .dashboard-feed-mask {
+    mask-image: linear-gradient(to bottom, transparent 0, black 8%, black 92%, transparent 100%);
+  }
+
+  .dashboard-feed-track {
+    animation: dashboard-feed-scroll 24s linear infinite;
+  }
+
+  .dashboard-feed-track:hover {
+    animation-play-state: paused;
+  }
+}
+
+@keyframes dashboard-feed-scroll {
+  0% {
+    transform: translateY(0);
+  }
+
+  100% {
+    transform: translateY(-50%);
+  }
+}
