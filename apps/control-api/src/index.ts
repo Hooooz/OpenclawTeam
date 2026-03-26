@@ -25,6 +25,8 @@ import {
 } from "./store.js";
 import { createControlCenterService } from "./control-center.js";
 import type { CollectorNodeReport } from "./collector-store.js";
+import { buildNodeRegistrationBundle } from "./node-registration.js";
+import { readCollectorReports, getCollectorReportsStorePath } from "./collector-store.js";
 
 const host = process.env.HOST || "0.0.0.0";
 const port = Number(process.env.PORT || 3201);
@@ -93,6 +95,65 @@ app.get("/api/control-center/settings", async () => ({
   ok: true,
   data: await controlCenter.getSettings()
 }));
+app.get("/api/control-center/node-management", async (request) => {
+  const publicUrl = process.env.CONTROL_CENTER_PUBLIC_URL?.trim();
+  const managerUrl =
+    publicUrl?.replace(/\/$/, "") ||
+    `${request.protocol}://${String(request.headers.host || `127.0.0.1:${port}`)}`.replace(/\/$/, "");
+  const settings = await controlCenter.getSettings();
+  const collectorToken = process.env.COLLECTOR_SHARED_TOKEN?.trim() || "openclaw-collector";
+
+  return {
+    ok: true,
+    data: {
+      nodes: settings.nodes,
+      registration: buildNodeRegistrationBundle({
+        managerUrl,
+        collectorToken
+      })
+    }
+  };
+});
+app.get<{ Params: { nodeId: string } }>("/api/control-center/nodes/:nodeId", async (request, reply) => {
+  const storePath = getCollectorReportsStorePath();
+  const reports = await readCollectorReports(storePath);
+  const nodeReport = reports.find((r) => r.node.id === request.params.nodeId);
+
+  if (!nodeReport) {
+    return reply.status(404).send({
+      ok: false,
+      message: "Node not found"
+    });
+  }
+
+  const recentReports = reports
+    .filter((r) => r.node.id === request.params.nodeId)
+    .sort((a, b) => new Date(b.collectedAt).getTime() - new Date(a.collectedAt).getTime())
+    .slice(0, 10)
+    .map((r) => ({
+      collectedAt: r.collectedAt,
+      agentCount: r.agents?.length || 0,
+      runCount: r.runs?.length || 0,
+      scheduleCount: r.schedules?.length || 0
+    }));
+
+  return {
+    ok: true,
+    data: {
+      node: nodeReport.node,
+      latestReport: {
+        collectedAt: nodeReport.collectedAt,
+        agentCount: nodeReport.agents?.length || 0,
+        runCount: nodeReport.runs?.length || 0,
+        scheduleCount: nodeReport.schedules?.length || 0,
+        agents: nodeReport.agents || [],
+        runs: nodeReport.runs?.slice(0, 5) || [],
+        schedules: nodeReport.schedules || []
+      },
+      recentReports
+    }
+  };
+});
 app.post<{ Body: CollectorNodeReport }>("/api/control-center/collector-reports", async (request, reply) => {
   const expectedToken = process.env.COLLECTOR_SHARED_TOKEN?.trim() || "openclaw-collector";
   const providedToken = String(request.headers["x-collector-token"] || "");

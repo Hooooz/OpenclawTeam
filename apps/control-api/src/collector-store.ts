@@ -16,6 +16,12 @@ export type CollectorNodeReport = {
   settings?: unknown;
 };
 
+export function getCollectorReportsStorePath(cwd = process.cwd()) {
+  return process.env.CONTROL_CENTER_COLLECTOR_STORE?.trim()
+    ? path.resolve(process.env.CONTROL_CENTER_COLLECTOR_STORE)
+    : path.resolve(cwd, ".runtime", "collector-reports.json");
+}
+
 export async function readCollectorReports(storePath: string): Promise<CollectorNodeReport[]> {
   try {
     const raw = await readFile(storePath, "utf8");

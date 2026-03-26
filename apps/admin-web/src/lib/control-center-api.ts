@@ -224,6 +224,54 @@ export type SettingsData = {
   } & Provenance>;
 };
 
+export type NodeRegistrationInstaller = {
+  platform: "macos" | "linux" | "windows";
+  label: string;
+  filename: string;
+  shell: "bash" | "powershell";
+  script: string;
+  notes: string[];
+};
+
+export type NodeManagementData = {
+  nodes: SettingsData["nodes"];
+  registration: {
+    managerUrl: string;
+    collectorTokenHint: string;
+    storage: {
+      controlPlaneDataFile: string;
+      schedulerHeartbeatFile: string;
+      collectorReportsFile: string;
+    };
+    installers: NodeRegistrationInstaller[];
+  };
+};
+
+export type NodeRecentReport = {
+  collectedAt: string;
+  agentCount: number;
+  runCount: number;
+  scheduleCount: number;
+};
+
+export type NodeDetailData = {
+  node: {
+    id: string;
+    name: string;
+    host: string;
+  };
+  latestReport: {
+    collectedAt: string;
+    agentCount: number;
+    runCount: number;
+    scheduleCount: number;
+    agents: unknown[];
+    runs: unknown[];
+    schedules: unknown[];
+  };
+  recentReports: NodeRecentReport[];
+};
+
 function getControlCenterBaseUrl() {
   const envUrl = import.meta.env.VITE_CONTROL_CENTER_API_URL?.trim();
   if (envUrl) {
@@ -310,4 +358,12 @@ export async function fetchControlCenterSchedules() {
 
 export async function fetchControlCenterSettings() {
   return fetchEnvelope<SettingsData>("/settings");
+}
+
+export async function fetchControlCenterNodeManagement() {
+  return fetchEnvelope<NodeManagementData>("/node-management");
+}
+
+export async function fetchControlCenterNodeDetail(nodeId: string) {
+  return fetchEnvelope<NodeDetailData>(`/nodes/${encodeURIComponent(nodeId)}`);
 }
