@@ -243,3 +243,31 @@ test("hybrid mode merges local and collector nodes into the same management back
     await rm(tempDir, { recursive: true, force: true });
   }
 });
+
+test("buildCollectorReport rewrites live machine info to the reporting node", async () => {
+  const { tempDir, openclawHome, collectorStorePath, fallback } = await createFixture();
+
+  try {
+    const { createControlCenterService } = await loadControlCenterModule();
+    const service = createControlCenterService({
+      openclawHome,
+      collectorStorePath,
+      sourceMode: "local",
+      controlPlaneProvider: async () => fallback,
+      now: () => new Date("2026-03-26T10:00:00.000Z"),
+    });
+
+    const report = await service.buildCollectorReport({
+      id: "local-macbook",
+      name: "本机 MacBook",
+      host: "local-macbook",
+    });
+
+    assert.equal(report.agents.length, 1);
+    assert.equal(report.agents[0]?.machine.host, "local-macbook");
+    assert.equal(report.agentDetails[0]?.machine.host, "local-macbook");
+    assert.equal(report.settings.deployInfo.host, "local-macbook");
+  } finally {
+    await rm(tempDir, { recursive: true, force: true });
+  }
+});

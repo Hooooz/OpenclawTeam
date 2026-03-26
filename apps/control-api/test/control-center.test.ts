@@ -342,6 +342,80 @@ async function createFixture() {
   return { tempDir, openclawHome, fallback };
 }
 
+async function createSingleWorkspaceFixture() {
+  const tempDir = await mkdtemp(path.join(os.tmpdir(), "openclaw-control-center-single-"));
+  const openclawHome = path.join(tempDir, ".openclaw");
+  const workspaceDir = path.join(tempDir, "clawd");
+
+  await writeJson(path.join(openclawHome, "openclaw.json"), {
+    meta: {
+      lastTouchedVersion: "2026.3.26",
+      lastTouchedAt: "2026-03-26T03:02:55.387Z"
+    },
+    agents: {
+      defaults: {
+        model: {
+          primary: "openai-codex/gpt-5.4"
+        },
+        workspace: workspaceDir
+      }
+    },
+    gateway: {
+      port: 18789,
+      bind: "loopback"
+    }
+  });
+
+  await writeText(
+    path.join(openclawHome, "maintenance", "openclaw-status.txt"),
+    [
+      "OpenClaw status",
+      "| OS              | macos 15.3 (arm64) · node 24.10.0 |",
+      "| Gateway         | local · ws://127.0.0.1:18789 (local loopback) · reachable |",
+      "| Gateway service | local process · healthy |",
+      "| Node service    | local process · healthy |",
+      "| Agents          | 1 · default main active |",
+      "| Sessions        | 0 active · 1 stores |",
+      "Summary: 0 critical · 0 warn · 0 info"
+    ].join("\n")
+  );
+
+  await writeText(path.join(openclawHome, "memory", "main.sqlite"), "");
+  await writeJson(path.join(openclawHome, "cron", "jobs.json"), {
+    version: 1,
+    jobs: []
+  });
+
+  await writeText(
+    path.join(workspaceDir, "IDENTITY.md"),
+    ["# IDENTITY.md - Who Am I?", "", "- **Name:** 洞察", "- **Creature:** AI 创意合作伙伴"].join("\n")
+  );
+  await writeText(path.join(workspaceDir, "USER.md"), ["# USER.md", "", "- **Name:** Howie"].join("\n"));
+  await writeText(path.join(workspaceDir, "SOUL.md"), "# SOUL\n- 主动梳理信息。");
+  await writeText(path.join(workspaceDir, "AGENTS.md"), "# AGENTS\n你是 Howie 的 AI 产品搭档。");
+
+  const fallback: ControlPlaneFallback = {
+    schedules: [],
+    runs: [],
+    skills: [],
+    server: {
+      host: "localhost",
+      os: "macOS",
+      containerRuntime: "Node 24",
+      repository: "https://github.com/Hooooz/OpenclawTeam.git"
+    },
+    scheduler: {
+      taskName: "OpenclawScheduleSweep",
+      endpoint: "http://localhost:3201/api/schedules/run-due",
+      lastHeartbeatAt: null,
+      lastOutcome: "never",
+      lastMessage: "never"
+    }
+  };
+
+  return { tempDir, openclawHome, fallback };
+}
+
 test("listAgents collapses machine-level OpenClaw suites into one business employee", async () => {
   const { tempDir, openclawHome, fallback } = await createFixture();
 
@@ -369,6 +443,32 @@ test("listAgents collapses machine-level OpenClaw suites into one business emplo
     assert.ok(liveAgent.mockFields.includes("position"));
     assert.ok(liveAgent.mockFields.includes("motto"));
     assert.equal(agents.length, 1);
+  } finally {
+    await rm(tempDir, { recursive: true, force: true });
+  }
+});
+
+test("listAgents discovers a single-workspace OpenClaw without agents.list", async () => {
+  const { tempDir, openclawHome, fallback } = await createSingleWorkspaceFixture();
+
+  try {
+    const { createControlCenterService } = await loadControlCenterModule();
+    const service = createControlCenterService({
+      openclawHome,
+      controlPlaneProvider: async () => fallback,
+      now: () => new Date("2026-03-26T10:00:00.000Z")
+    });
+
+    const agents = await service.listAgents();
+    const detail = await service.getAgentDetail(agents[0]!.id);
+
+    assert.equal(agents.length, 1);
+    assert.equal(agents[0]?.name, "洞察");
+    assert.equal(agents[0]?.machine.host, "localhost");
+    assert.equal(agents[0]?.openclawCount, 1);
+    assert.equal(agents[0]?.channelCount, 0);
+    assert.equal(detail?.name, "洞察");
+    assert.equal(detail?.channelCount, 0);
   } finally {
     await rm(tempDir, { recursive: true, force: true });
   }

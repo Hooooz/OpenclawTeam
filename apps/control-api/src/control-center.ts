@@ -836,6 +836,23 @@ function parseBehaviorRules(soulContent: string) {
     .slice(0, 4);
 }
 
+function parseIdentityField(markdown: string, field: string) {
+  const pattern = new RegExp(`^-\\s*\\*\\*${field}:\\*\\*\\s*(.+)$`, "im");
+  return markdown.match(pattern)?.[1]?.trim() || "";
+}
+
+function parseIdentityMetadata(identityContent: string) {
+  return {
+    name: parseIdentityField(identityContent, "Name"),
+    creature: parseIdentityField(identityContent, "Creature"),
+    vibe: parseIdentityField(identityContent, "Vibe")
+  };
+}
+
+function parseUserName(userContent: string) {
+  return parseIdentityField(userContent, "Name");
+}
+
 function summarizeWorkspaceRole(agentsContent: string, identity: ReturnType<typeof deriveAgentIdentity>) {
   const body = agentsContent
     .split(/\r?\n/)
@@ -848,12 +865,25 @@ function summarizeWorkspaceRole(agentsContent: string, identity: ReturnType<type
   return role || `${identity.department}场景下的数字员工，负责接收请求、梳理上下文并推动执行。`;
 }
 
-function getPathCandidates(openclawHome: string, agentId: string, workspaceDir?: string) {
+function getPathCandidates(
+  openclawHome: string,
+  agentId: string,
+  workspaceDir?: string,
+  defaultWorkspaceDir?: string
+) {
   const rootDir = path.dirname(openclawHome);
   const workspaceBase = workspaceDir ? path.win32.basename(workspaceDir) : "";
+  const normalizedDefaultWorkspace =
+    defaultWorkspaceDir && !/^[A-Za-z]:\\/.test(defaultWorkspaceDir)
+      ? defaultWorkspaceDir
+      : defaultWorkspaceDir
+        ? path.join(rootDir, path.win32.basename(defaultWorkspaceDir))
+        : "";
 
   return {
     workspace: [
+      workspaceDir || "",
+      normalizedDefaultWorkspace,
       workspaceBase ? path.join(rootDir, workspaceBase) : "",
       path.join(rootDir, `workspace-${agentId}`),
       agentId === "main" ? path.join(rootDir, "workspace") : ""
@@ -905,6 +935,40 @@ async function readAgentSessionStore(openclawHome: string, agentId: string) {
   );
 }
 
+async function discoverAgentIds(openclawHome: string, config: OpenClawConfig) {
+  const configuredIds = (config.agents?.list || [])
+    .map((item) => item.id?.trim())
+    .filter((item): item is string => Boolean(item));
+
+  if (configuredIds.length > 0) {
+    return configuredIds;
+  }
+
+  const agentDir = path.join(openclawHome, "agents");
+  try {
+    const entries = await readdir(agentDir, { withFileTypes: true });
+    const derivedIds = entries
+      .filter((entry) => entry.isDirectory())
+      .map((entry) => entry.name)
+      .filter(Boolean);
+
+    if (derivedIds.length > 0) {
+      return derivedIds;
+    }
+  } catch {
+    // noop
+  }
+
+  const defaultWorkspace = config.agents?.defaults?.workspace?.trim();
+  const hasDefaultWorkspace = defaultWorkspace ? await fileExists(defaultWorkspace) : false;
+  const hasMainMemory = await fileExists(path.join(openclawHome, "memory", "main.sqlite"));
+  const hasCron = await fileExists(path.join(openclawHome, "cron", "jobs.json"));
+  const pairedDevices = await readJsonFile<Record<string, unknown>>(path.join(openclawHome, "devices", "paired.json"), {});
+  const hasDevices = Object.keys(pairedDevices).length > 0;
+
+  return hasDefaultWorkspace || hasMainMemory || hasCron || hasDevices ? ["main"] : [];
+}
+
 async function buildLiveAgentContext(
   openclawHome: string,
   agentId: string,
@@ -921,13 +985,23 @@ async function buildLiveAgentContext(
   const pathCandidates = getPathCandidates(
     openclawHome,
     agentId,
-    latestSession?.systemPromptReport?.workspaceDir
+    latestSession?.systemPromptReport?.workspaceDir,
+    config.agents?.defaults?.workspace
   );
   const workspaceFiles = await readWorkspaceFiles(pathCandidates.workspace);
   const agentsFile = workspaceFiles.find((item) => item.name === "AGENTS.md")?.path || "";
+  const identityFile = workspaceFiles.find((item) => item.name === "IDENTITY.md")?.path || "";
   const soulFile = workspaceFiles.find((item) => item.name === "SOUL.md")?.path || "";
+  const userFile = workspaceFiles.find((item) => item.name === "USER.md")?.path || "";
   const agentsContent = agentsFile ? await readTextFile(agentsFile) : "";
+  const identityContent = identityFile ? await readTextFile(identityFile) : "";
   const soulContent = soulFile ? await readTextFile(soulFile) : "";
+  const userContent = userFile ? await readTextFile(userFile) : "";
+  const identityMetadata = parseIdentityMetadata(identityContent);
+  const displayName = identityMetadata.name || identity.displayName;
+  const displayNameMock = identityMetadata.name ? false : identity.displayNameMock;
+  const position =
+    agentId === "main" && identityMetadata.creature ? identityMetadata.creature : identity.position;
   const memoryConnected = await fileExists(pathCandidates.memory[0]!);
   const resolvedSkills = latestSession?.skillsSnapshot?.resolvedSkills || [];
   const skillNames = (
@@ -946,21 +1020,21 @@ async function buildLiveAgentContext(
   const role = summarizeWorkspaceRole(agentsContent, identity);
   const description = role;
   const mockFields = [
-    identity.displayNameMock ? "name" : "",
+    displayNameMock ? "name" : "",
     "position",
     "department",
     "motto",
-    "owner"
+    parseUserName(userContent) ? "" : "owner"
   ].filter(Boolean);
 
   return {
     agentId,
-    displayName: identity.displayName,
-    displayNameMock: identity.displayNameMock,
-    position: identity.position,
+    displayName,
+    displayNameMock,
+    position,
     department: identity.department,
     group: identity.group,
-    avatar: toAvatar(identity.displayName),
+    avatar: toAvatar(displayName),
     motto: identity.motto,
     communicationStyle: identity.communicationStyle,
     role,
@@ -979,7 +1053,7 @@ async function buildLiveAgentContext(
     mockFields,
     createdAt:
       workspaceFiles[0]?.modifiedAt || formatDateTime(config.meta?.lastTouchedAt || new Date(0).toISOString()),
-    owner: "Administrator",
+    owner: parseUserName(userContent) || "Administrator",
     outputStyle: "OpenClaw 会话输出",
     behaviorRules: parseBehaviorRules(soulContent),
     systemPrompt: agentsContent || "当前 workspace 中未找到 AGENTS.md，暂以默认 OpenClaw 约束运行。",
@@ -990,14 +1064,12 @@ async function buildLiveAgentContext(
     workspaceKey: toWorkspaceKey(agentId, pathCandidates.workspace),
     latestSurface: mapSurfaceLabel(latestSession?.origin?.surface),
     latestChatType: deriveChannelType(latestSession, agentId),
-    latestOriginLabel: latestSession?.origin?.label?.trim() || identity.displayName
+    latestOriginLabel: latestSession?.origin?.label?.trim() || displayName
   };
 }
 
 async function loadLiveAgents(openclawHome: string, config: OpenClawConfig, now: Date) {
-  const agentIds = (config.agents?.list || [])
-    .map((item) => item.id?.trim())
-    .filter((item): item is string => Boolean(item));
+  const agentIds = await discoverAgentIds(openclawHome, config);
 
   return Promise.all(agentIds.map((agentId) => buildLiveAgentContext(openclawHome, agentId, config, now)));
 }
@@ -1146,10 +1218,7 @@ function buildAgentListItem(context: LiveEmployeeContext): ControlCenterAgentLis
     communicationStyle: context.communicationStyle,
     specialties: context.specialties,
     machine: context.machine,
-    channelCount: Math.max(
-      context.channels.reduce((sum, channel) => sum + channel.sessionEntries.length, 0),
-      1
-    ),
+    channelCount: context.channels.reduce((sum, channel) => sum + channel.sessionEntries.length, 0),
     openclawCount: 1,
     dataSource: "live",
     mockFields: context.mockFields
@@ -2220,18 +2289,55 @@ export function createControlCenterService(options: ControlCenterServiceOptions 
         includeCollectorReports: false,
         sourceMode: "local"
       });
-      const [agents, runs, schedules, settings] = await Promise.all([
+      const [allAgents, allRuns, allSchedules, rawSettings] = await Promise.all([
         localService.listAgents(),
         localService.listRuns(),
         localService.listSchedules(),
         localService.getSettings()
       ]);
-      const agentDetails = (await Promise.all(agents.map((agent) => localService.getAgentDetail(agent.id)))).filter(
-        Boolean
-      ) as ControlCenterAgentDetail[];
-      const runDetails = (await Promise.all(runs.map((run) => localService.getRunDetail(run.id)))).filter(
-        Boolean
-      ) as ControlCenterRunDetail[];
+      const reportNodeHost = node?.host || os.hostname();
+      const reportNodeName = node?.name || os.hostname();
+      const normalizeNodeMachine = (machine?: ControlCenterMachineInfo): ControlCenterMachineInfo => ({
+        ...(machine || {
+          id: `machine-${slugify(reportNodeHost)}`,
+          name: reportNodeName,
+          host: reportNodeHost,
+          runtime: "OpenClaw",
+          status: "healthy",
+          dataSource: "live" as const
+        }),
+        host: reportNodeHost,
+        name: reportNodeName
+      });
+
+      const agents = allAgents
+        .filter((agent) => agent.dataSource === "live")
+        .map((agent) => ({
+          ...agent,
+          machine: normalizeNodeMachine(agent.machine)
+        }));
+      const runs = allRuns.filter((run) => run.dataSource === "live");
+      const schedules = allSchedules.filter((schedule) => schedule.dataSource === "live");
+      const settings: ControlCenterSettings = {
+        ...rawSettings,
+        deployInfo: {
+          ...rawSettings.deployInfo,
+          host: reportNodeHost
+        },
+        services: rawSettings.services.filter((service) => service.dataSource === "live"),
+        systemConfigs: rawSettings.systemConfigs.filter((config) => config.dataSource === "live"),
+        nodes: []
+      };
+      const agentDetails = (await Promise.all(agents.map((agent) => localService.getAgentDetail(agent.id))))
+        .filter((detail): detail is ControlCenterAgentDetail => Boolean(detail))
+        .filter((detail) => detail.dataSource === "live")
+        .map((detail) => ({
+          ...detail,
+          machine: normalizeNodeMachine(detail.machine)
+        }));
+      const runDetails = (await Promise.all(runs.map((run) => localService.getRunDetail(run.id))))
+        .filter((detail): detail is ControlCenterRunDetail => Boolean(detail))
+        .filter((detail) => detail.dataSource === "live");
 
       return {
         node: {
