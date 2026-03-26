@@ -24,6 +24,20 @@ const fallbackSettings: SettingsData = {
   },
   services: withMockProvenance(takeMockItems(mockServices), "服务健康卡片当前使用演示数据，仅保留 1 条样例"),
   systemConfigs: withMockProvenance(takeMockItems(mockSystemConfigs), "系统配置当前使用演示数据，仅保留 1 条样例"),
+  nodes: withMockProvenance(
+    [
+      {
+        id: "mock-node-1",
+        name: "演示节点",
+        host: "127.0.0.1",
+        status: "healthy",
+        lastCollectedAt: "2026-03-26 18:00",
+        agentCount: 1,
+        runCount: 1,
+      },
+    ],
+    "节点采集状态当前使用演示数据，仅保留 1 条样例",
+  ),
 };
 
 export default function Settings() {
@@ -39,6 +53,7 @@ export default function Settings() {
     ...collectMockNotes(settings.deployInfo.ports),
     ...collectMockNotes(settings.services),
     ...collectMockNotes(settings.systemConfigs),
+    ...collectMockNotes(settings.nodes),
   ];
 
   if (settingsQuery.isError) {
@@ -117,6 +132,29 @@ export default function Settings() {
                 <span className="font-mono text-xs text-muted-foreground">
                   {port.protocol}:{port.port}
                 </span>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="rounded-md border bg-card p-4 shadow-sm">
+          <h3 className="mb-3 flex items-center gap-1.5 text-sm font-medium">
+            <Server className="h-4 w-4" />
+            采集节点
+          </h3>
+          <div className="space-y-2">
+            {settings.nodes.map((node) => (
+              <div key={node.id} className="flex items-center justify-between gap-3 rounded-md bg-muted px-3 py-2 text-sm">
+                <div className="flex items-center gap-2">
+                  <span className="font-medium text-foreground">{node.name}</span>
+                  <DataSourceBadge item={node} className="px-1.5 py-0 text-[9px]" />
+                </div>
+                <div className="flex items-center gap-4 text-xs text-muted-foreground">
+                  <span>{node.host}</span>
+                  <span>员工 {node.agentCount}</span>
+                  <span>记录 {node.runCount}</span>
+                  <span>采集于 {node.lastCollectedAt}</span>
+                </div>
               </div>
             ))}
           </div>

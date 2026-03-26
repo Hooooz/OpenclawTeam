@@ -18,5 +18,6 @@ New-Item -ItemType Directory -Force -Path $logDir | Out-Null
 Set-Location $InstallDir
 $env:PORT = "3201"
 $env:OPENCLAW_HOME = $OpenClawHome
+$env:CONTROL_CENTER_SOURCE_MODE = "collector"
 
 & $nodeExe "apps/control-api/dist/index.js" *> (Join-Path $logDir "control-api.log")

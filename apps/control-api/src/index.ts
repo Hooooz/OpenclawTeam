@@ -24,6 +24,7 @@ import {
   updateAgentSkillBindings
 } from "./store.js";
 import { createControlCenterService } from "./control-center.js";
+import type { CollectorNodeReport } from "./collector-store.js";
 
 const host = process.env.HOST || "0.0.0.0";
 const port = Number(process.env.PORT || 3201);
@@ -92,6 +93,32 @@ app.get("/api/control-center/settings", async () => ({
   ok: true,
   data: await controlCenter.getSettings()
 }));
+app.post<{ Body: CollectorNodeReport }>("/api/control-center/collector-reports", async (request, reply) => {
+  const expectedToken = process.env.COLLECTOR_SHARED_TOKEN?.trim() || "openclaw-collector";
+  const providedToken = String(request.headers["x-collector-token"] || "");
+
+  if (providedToken !== expectedToken) {
+    return reply.status(401).send({
+      ok: false,
+      message: "collector token invalid"
+    });
+  }
+
+  const report = request.body;
+
+  if (!report?.node?.id || !report?.node?.name || !report?.node?.host) {
+    return reply.status(400).send({
+      ok: false,
+      message: "node.id, node.name, and node.host are required"
+    });
+  }
+
+  await controlCenter.ingestCollectorReport(report);
+
+  return reply.status(202).send({
+    ok: true
+  });
+});
 
 app.get("/api/dashboard", async () => getDashboardSnapshot());
 app.get("/api/agents", async () => listAgents());

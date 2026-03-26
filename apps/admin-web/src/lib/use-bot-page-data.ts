@@ -51,6 +51,7 @@ const fallbackSettings: SettingsData = {
   },
   services: withMockProvenance(takeMockItems(mockServices), "服务健康卡片当前使用演示数据，仅保留 1 条样例"),
   systemConfigs: withMockProvenance(takeMockItems(mockSystemConfigs), "系统配置当前使用演示数据，仅保留 1 条样例"),
+  nodes: withMockProvenance([], "节点采集状态当前暂无演示数据"),
 };
 
 export function useBotPageData(agentId: string) {

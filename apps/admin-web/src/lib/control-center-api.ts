@@ -213,6 +213,15 @@ export type SettingsData = {
   deployInfo: DeployInfo;
   services: ServiceHealth[];
   systemConfigs: SystemConfig[];
+  nodes: Array<{
+    id: string;
+    name: string;
+    host: string;
+    status: "healthy" | "degraded" | "down";
+    lastCollectedAt: string;
+    agentCount: number;
+    runCount: number;
+  } & Provenance>;
 };
 
 function getControlCenterBaseUrl() {

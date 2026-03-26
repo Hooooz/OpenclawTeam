@@ -121,7 +121,7 @@ export function buildWorkbenchData(runs: RunListItem[], now = new Date()): Workb
   const completedToday = currentDay.filter(isCompleted);
   const todayTaskCount = completedToday.length;
   const todayFileCount = completedToday.reduce((sum, run) => sum + estimateFileCount(run), 0);
-  const weeklySeed = Array.from({ length: 7 }, (_, offset) => {
+  const weeklySeed: WorkbenchWeekItem[] = Array.from({ length: 7 }, (_, offset) => {
     const day = new Date(now);
     day.setHours(0, 0, 0, 0);
     day.setDate(now.getDate() - (6 - offset));
@@ -131,7 +131,7 @@ export function buildWorkbenchData(runs: RunListItem[], now = new Date()): Workb
       tasks: 0,
       files: 0,
       savings: 0,
-      dataSource: "live" as const,
+      dataSource: "live",
     };
   });
   const weeklyMap = new Map(weeklySeed.map((item) => [item.dateKey, item]));

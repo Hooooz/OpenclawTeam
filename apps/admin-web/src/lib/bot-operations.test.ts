@@ -154,6 +154,7 @@ const settings: SettingsData = {
   systemConfigs: [
     { key: "agent_default_model", label: "默认模型", value: "openai-codex/gpt-5.3-codex", editable: false, category: "AI", dataSource: "live" },
   ],
+  nodes: [],
 };
 
 describe("bot-operations adapters", () => {

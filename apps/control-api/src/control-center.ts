@@ -2,6 +2,7 @@ import { access, readFile, readdir, stat } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { getDashboardSnapshot } from "./store.js";
+import { readCollectorReports, upsertCollectorReport, type CollectorNodeReport } from "./collector-store.js";
 
 type LegacyFallback = Awaited<ReturnType<typeof getDashboardSnapshot>>;
 
@@ -279,7 +280,18 @@ export type ControlCenterSettings = {
   deployInfo: ControlCenterDeployInfo;
   services: ControlCenterServiceHealth[];
   systemConfigs: ControlCenterSystemConfig[];
+  nodes: ControlCenterNodeInfo[];
 };
+
+export type ControlCenterNodeInfo = {
+  id: string;
+  name: string;
+  host: string;
+  status: "healthy" | "degraded" | "down";
+  lastCollectedAt: string;
+  agentCount: number;
+  runCount: number;
+} & Provenance;
 
 export type ControlCenterDashboard = {
   metrics: ControlCenterMetricItem[];
@@ -320,6 +332,9 @@ type ControlCenterServiceOptions = {
   openclawHome?: string;
   controlPlaneProvider?: () => Promise<LegacyFallback>;
   now?: () => Date;
+  collectorStorePath?: string;
+  includeCollectorReports?: boolean;
+  sourceMode?: "local" | "hybrid" | "collector";
 };
 
 type LiveAgentContext = {
@@ -396,6 +411,12 @@ function defaultOpenClawHome() {
   return process.env.OPENCLAW_HOME?.trim()
     ? path.resolve(process.env.OPENCLAW_HOME)
     : path.resolve(os.homedir(), ".openclaw");
+}
+
+function defaultCollectorStorePath() {
+  return process.env.CONTROL_CENTER_COLLECTOR_STORE?.trim()
+    ? path.resolve(process.env.CONTROL_CENTER_COLLECTOR_STORE)
+    : path.resolve(process.cwd(), ".runtime", "collector-reports.json");
 }
 
 async function fileExists(filePath: string) {
@@ -1512,7 +1533,271 @@ function buildSettings(config: OpenClawConfig, status: OpenClawStatus, fallback:
   return {
     deployInfo,
     services: buildServices(status, fallback, new Date()),
-    systemConfigs
+    systemConfigs,
+    nodes: []
+  };
+}
+
+function prefixCollectorId(nodeId: string, value: string) {
+  return `collector-${slugify(nodeId)}__${value}`;
+}
+
+function appendCollectorNote(note: string | undefined, nodeName: string) {
+  const prefix = `来自采集器节点 ${nodeName}`;
+  return note ? `${prefix} · ${note}` : prefix;
+}
+
+function normalizeCollectorMachine(
+  machine: Partial<ControlCenterMachineInfo> | undefined,
+  report: CollectorNodeReport
+): ControlCenterMachineInfo {
+  return {
+    id: prefixCollectorId(report.node.id, machine?.id || report.node.id),
+    name: machine?.name || report.node.name,
+    host: machine?.host || report.node.host,
+    runtime: machine?.runtime || report.node.host,
+    status: machine?.status || "healthy",
+    dataSource: machine?.dataSource || "live",
+    dataSourceNote: appendCollectorNote(machine?.dataSourceNote, report.node.name)
+  };
+}
+
+function normalizeCollectorNodes(reports: CollectorNodeReport[], now: Date): ControlCenterNodeInfo[] {
+  return reports.map((report) => {
+    const collectedAt = report.collectedAt || "—";
+    const collectedDate = new Date(collectedAt.replace(" ", "T"));
+    const diffMinutes = Number.isNaN(collectedDate.getTime())
+      ? Number.POSITIVE_INFINITY
+      : Math.max(0, Math.round((now.getTime() - collectedDate.getTime()) / 60_000));
+    const status = diffMinutes <= 15 ? "healthy" : diffMinutes <= 60 ? "degraded" : "down";
+
+    return {
+      id: prefixCollectorId(report.node.id, "node"),
+      name: report.node.name,
+      host: report.node.host,
+      status,
+      lastCollectedAt: collectedAt,
+      agentCount: Array.isArray(report.agents) ? report.agents.length : 0,
+      runCount: Array.isArray(report.runs) ? report.runs.length : 0,
+      dataSource: "live",
+      dataSourceNote: appendCollectorNote(undefined, report.node.name)
+    };
+  });
+}
+
+function normalizeCollectorAgent(
+  raw: unknown,
+  report: CollectorNodeReport
+): ControlCenterAgentListItem | null {
+  const agent = raw as Partial<ControlCenterAgentListItem> | null;
+  if (!agent?.id || !agent.name) {
+    return null;
+  }
+
+  return {
+    id: prefixCollectorId(report.node.id, agent.id),
+    name: agent.name,
+    position: agent.position || "数字员工",
+    department: agent.department || "OpenClaw",
+    avatar: agent.avatar || "O",
+    motto: agent.motto || "通过采集器接入的远端数字员工。",
+    role: agent.role || "远端节点数字员工",
+    status: agent.status || "idle",
+    model: agent.model || "unknown",
+    skillCount: agent.skillCount || 0,
+    knowledgeCount: agent.knowledgeCount || 0,
+    lastRunTime: agent.lastRunTime || "—",
+    lastRunStatus: agent.lastRunStatus || null,
+    successRate: agent.successRate || 0,
+    group: agent.group || "远端节点",
+    communicationStyle: agent.communicationStyle || "稳定执行",
+    specialties: Array.isArray(agent.specialties) ? agent.specialties : [],
+    machine: normalizeCollectorMachine(agent.machine, report),
+    channelCount: agent.channelCount || 0,
+    openclawCount: agent.openclawCount || 1,
+    dataSource: agent.dataSource || "live",
+    dataSourceNote: appendCollectorNote(agent.dataSourceNote, report.node.name),
+    mockFields: agent.mockFields
+  };
+}
+
+function normalizeCollectorRun(
+  raw: unknown,
+  report: CollectorNodeReport
+): ControlCenterRunListItem | null {
+  const run = raw as Partial<ControlCenterRunListItem> | null;
+  if (!run?.id || !run.agentId) {
+    return null;
+  }
+
+  return {
+    id: prefixCollectorId(report.node.id, run.id),
+    runId: run.runId || String(run.id).toUpperCase(),
+    agentName: run.agentName || report.node.name,
+    agentPosition: run.agentPosition || "数字员工",
+    agentId: prefixCollectorId(report.node.id, run.agentId),
+    channelId: prefixCollectorId(report.node.id, run.channelId || "channel"),
+    channelName: run.channelName || "远端通道",
+    channelType: run.channelType || "系统",
+    triggerSource: run.triggerSource || "manual",
+    startTime: run.startTime || "—",
+    duration: run.duration || "—",
+    status: run.status || "running",
+    outputSummary: run.outputSummary || "—",
+    traceId: prefixCollectorId(report.node.id, run.traceId || run.id),
+    taskName: run.taskName || "远端任务",
+    conversationTopic: run.conversationTopic || run.taskName || "远端会话",
+    memorySummary: run.memorySummary || "—",
+    versionDiff: run.versionDiff || "—",
+    sourcePlatform: run.sourcePlatform || "系统",
+    dataSource: run.dataSource || "live",
+    dataSourceNote: appendCollectorNote(run.dataSourceNote, report.node.name),
+    mockFields: run.mockFields
+  };
+}
+
+function normalizeCollectorSchedule(
+  raw: unknown,
+  report: CollectorNodeReport
+): ControlCenterScheduleListItem | null {
+  const schedule = raw as Partial<ControlCenterScheduleListItem> | null;
+  if (!schedule?.id) {
+    return null;
+  }
+
+  return {
+    id: prefixCollectorId(report.node.id, schedule.id),
+    name: schedule.name || "远端定时任务",
+    agentName: schedule.agentName || report.node.name,
+    agentId: prefixCollectorId(report.node.id, schedule.agentId || "agent"),
+    cron: schedule.cron || "* * * * *",
+    frequency: schedule.frequency || "Cron 任务",
+    status: schedule.status || "active",
+    nextRun: schedule.nextRun || "—",
+    lastRunResult: schedule.lastRunResult || null,
+    lastRunTime: schedule.lastRunTime || "—",
+    consecutiveSuccess: schedule.consecutiveSuccess || 0,
+    totalRuns: schedule.totalRuns || 0,
+    failedRuns: schedule.failedRuns || 0,
+    dataSource: schedule.dataSource || "live",
+    dataSourceNote: appendCollectorNote(schedule.dataSourceNote, report.node.name),
+    mockFields: schedule.mockFields
+  };
+}
+
+function normalizeCollectorAgentDetail(
+  raw: unknown,
+  report: CollectorNodeReport
+): ControlCenterAgentDetail | null {
+  const detail = raw as Partial<ControlCenterAgentDetail> | null;
+  const base = normalizeCollectorAgent(raw, report);
+  if (!base) {
+    return null;
+  }
+
+  return {
+    ...base,
+    description: detail?.description || base.role,
+    owner: detail?.owner || "Collector",
+    createdAt: detail?.createdAt || report.collectedAt,
+    workCreed: detail?.workCreed || "通过采集器同步远端 OpenClaw 状态。",
+    systemPrompt: detail?.systemPrompt || "远端采集节点未上报系统提示词。",
+    behaviorRules: Array.isArray(detail?.behaviorRules) ? detail.behaviorRules : [],
+    outputStyle: detail?.outputStyle || "远端采集输出",
+    channels: (detail?.channels || []).map((channel) => ({
+      ...channel,
+      id: prefixCollectorId(report.node.id, channel.id),
+      dataSourceNote: appendCollectorNote(channel.dataSourceNote, report.node.name)
+    })),
+    skills: (detail?.skills || []).map((skill) => ({
+      ...skill,
+      id: prefixCollectorId(report.node.id, skill.id),
+      dataSourceNote: appendCollectorNote(skill.dataSourceNote, report.node.name)
+    })),
+    knowledgeSources: (detail?.knowledgeSources || []).map((knowledge) => ({
+      ...knowledge,
+      id: prefixCollectorId(report.node.id, knowledge.id),
+      dataSourceNote: appendCollectorNote(knowledge.dataSourceNote, report.node.name)
+    })),
+    schedules: (detail?.schedules || []).map((schedule) => ({
+      ...schedule,
+      id: prefixCollectorId(report.node.id, schedule.id),
+      dataSourceNote: appendCollectorNote(schedule.dataSourceNote, report.node.name)
+    })),
+    recentRuns: (detail?.recentRuns || []).map((run) => ({
+      ...run,
+      id: prefixCollectorId(report.node.id, run.id),
+      dataSourceNote: appendCollectorNote(run.dataSourceNote, report.node.name)
+    })),
+    auditLog: (detail?.auditLog || []).map((log) => ({
+      ...log,
+      id: prefixCollectorId(report.node.id, log.id),
+      dataSourceNote: appendCollectorNote(log.dataSourceNote, report.node.name)
+    }))
+  };
+}
+
+function normalizeCollectorRunDetail(
+  raw: unknown,
+  report: CollectorNodeReport
+): ControlCenterRunDetail | null {
+  const detail = raw as Partial<ControlCenterRunDetail> | null;
+  const rawSteps = (detail?.steps || []) as Array<
+    Partial<ControlCenterRunDetail["steps"][number]>
+  >;
+  const rawSkillCalls = (detail?.skillCalls || []) as Array<
+    Partial<ControlCenterRunDetail["skillCalls"][number]>
+  >;
+  const base = normalizeCollectorRun(raw, report);
+  if (!base) {
+    return null;
+  }
+
+  return {
+    ...base,
+    triggeredBy: detail?.triggeredBy || base.sourcePlatform,
+    endTime: detail?.endTime || base.startTime,
+    inputParams: detail?.inputParams || {},
+    outputResult: detail?.outputResult || base.outputSummary,
+    errorMessage: detail?.errorMessage || null,
+    steps: rawSteps.map((step) => ({
+      ...step,
+      id: prefixCollectorId(report.node.id, step.id || "step"),
+      name: step.name || "collector-step",
+      status: step.status || "success",
+      startTime: step.startTime || base.startTime,
+      duration: step.duration || "—",
+      detail: step.detail || "远端节点步骤",
+      dataSource: step.dataSource || "live",
+      dataSourceNote: appendCollectorNote(step.dataSourceNote, report.node.name)
+    })),
+    skillCalls: rawSkillCalls.map((skill) => ({
+      ...skill,
+      id: prefixCollectorId(report.node.id, skill.id || "skill"),
+      skillName: skill.skillName || "collector-skill",
+      result: skill.result || "success",
+      duration: skill.duration || "—",
+      input: skill.input || "",
+      output: skill.output || "",
+      dataSource: skill.dataSource || "live",
+      dataSourceNote: appendCollectorNote(skill.dataSourceNote, report.node.name)
+    })),
+    logs: detail?.logs || [],
+    audit: (detail?.audit || []).map((entry) => ({
+      ...entry,
+      dataSourceNote: appendCollectorNote(entry.dataSourceNote, report.node.name)
+    }))
+  };
+}
+
+function buildCollectorAggregation(reports: CollectorNodeReport[], now: Date) {
+  return {
+    nodes: normalizeCollectorNodes(reports, now),
+    agents: reports.flatMap((report) => (report.agents || []).map((item) => normalizeCollectorAgent(item, report)).filter(Boolean) as ControlCenterAgentListItem[]),
+    agentDetails: reports.flatMap((report) => (report.agentDetails || []).map((item) => normalizeCollectorAgentDetail(item, report)).filter(Boolean) as ControlCenterAgentDetail[]),
+    runs: reports.flatMap((report) => (report.runs || []).map((item) => normalizeCollectorRun(item, report)).filter(Boolean) as ControlCenterRunListItem[]),
+    runDetails: reports.flatMap((report) => (report.runDetails || []).map((item) => normalizeCollectorRunDetail(item, report)).filter(Boolean) as ControlCenterRunDetail[]),
+    schedules: reports.flatMap((report) => (report.schedules || []).map((item) => normalizeCollectorSchedule(item, report)).filter(Boolean) as ControlCenterScheduleListItem[])
   };
 }
 
@@ -1532,6 +1817,11 @@ export function createControlCenterService(options: ControlCenterServiceOptions 
   const openclawHome = options.openclawHome ? path.resolve(options.openclawHome) : defaultOpenClawHome();
   const controlPlaneProvider = options.controlPlaneProvider || defaultControlPlaneProvider;
   const nowProvider = options.now || (() => new Date());
+  const collectorStorePath = options.collectorStorePath
+    ? path.resolve(options.collectorStorePath)
+    : defaultCollectorStorePath();
+  const includeCollectorReports = options.includeCollectorReports ?? true;
+  const sourceMode = options.sourceMode || ((process.env.CONTROL_CENTER_SOURCE_MODE as "local" | "hybrid" | "collector" | undefined) ?? "local");
 
   async function loadContext() {
     const now = nowProvider();
@@ -1539,30 +1829,35 @@ export function createControlCenterService(options: ControlCenterServiceOptions 
       loadOpenClawSnapshot(openclawHome),
       controlPlaneProvider()
     ]);
-    const liveAgents = await loadLiveAgents(openclawHome, config, now);
+    const localEnabled = sourceMode !== "collector";
+    const collectorEnabled = includeCollectorReports && sourceMode !== "local";
+    const liveAgents = localEnabled ? await loadLiveAgents(openclawHome, config, now) : [];
     const liveEmployees = liveAgents.length > 0 ? [buildEmployeeContext(liveAgents, fallback)] : [];
+    const collectorReports = collectorEnabled ? await readCollectorReports(collectorStorePath) : [];
+    const collectors = buildCollectorAggregation(collectorReports, now);
     return {
       now,
       config,
       status,
       fallback,
       liveAgents,
-      liveEmployees
+      liveEmployees,
+      collectors
     };
   }
 
   return {
     async listAgents(): Promise<ControlCenterAgentListItem[]> {
-      const { liveEmployees } = await loadContext();
-      return liveEmployees.map((agent) => buildAgentListItem(agent));
+      const { liveEmployees, collectors } = await loadContext();
+      return [...liveEmployees.map((agent) => buildAgentListItem(agent)), ...collectors.agents];
     },
 
     async getAgentDetail(agentId: string): Promise<ControlCenterAgentDetail | null> {
-      const { liveEmployees, fallback } = await loadContext();
+      const { liveEmployees, fallback, collectors } = await loadContext();
       const context = liveEmployees.find((agent) => agent.employeeId === agentId);
 
       if (!context) {
-        return null;
+        return collectors.agentDetails.find((detail) => detail.id === agentId) || null;
       }
 
       const primaryAgent = context.channels[0]!;
@@ -1658,13 +1953,19 @@ export function createControlCenterService(options: ControlCenterServiceOptions 
     },
 
     async listRuns(): Promise<ControlCenterRunListItem[]> {
-      const { liveEmployees, fallback, now } = await loadContext();
+      const { liveEmployees, fallback, now, collectors } = await loadContext();
       const liveRuns = await buildLiveRuns(liveEmployees, openclawHome, now);
       const fallbackRuns = buildFallbackRuns(fallback);
-      return [...liveRuns, ...fallbackRuns].sort((left, right) => right.startTime.localeCompare(left.startTime));
+      return [...liveRuns, ...collectors.runs, ...fallbackRuns].sort((left, right) => right.startTime.localeCompare(left.startTime));
     },
 
     async getRunDetail(runId: string): Promise<ControlCenterRunDetail | null> {
+      const { collectors } = await loadContext();
+      const collectorRun = collectors.runDetails.find((item) => item.id === runId);
+      if (collectorRun) {
+        return collectorRun;
+      }
+
       const runs = await this.listRuns();
       const run = runs.find((item) => item.id === runId);
 
@@ -1739,17 +2040,17 @@ export function createControlCenterService(options: ControlCenterServiceOptions 
     },
 
     async listSchedules(): Promise<ControlCenterScheduleListItem[]> {
-      const { fallback } = await loadContext();
+      const { fallback, collectors } = await loadContext();
       const jobs = await readJsonFile<{ version?: number; jobs?: unknown[] }>(
         path.join(openclawHome, "cron", "jobs.json"),
         { jobs: [] }
       );
 
       if (!Array.isArray(jobs.jobs) || jobs.jobs.length === 0) {
-        return buildFallbackSchedules(fallback);
+        return [...collectors.schedules, ...buildFallbackSchedules(fallback)];
       }
 
-      return jobs.jobs.map((job, index) => {
+      const localSchedules: ControlCenterScheduleListItem[] = jobs.jobs.map((job, index) => {
         const record = job as Record<string, unknown>;
         const cron = String(record.cron || record.expression || record.schedule || "* * * * *");
         const enabled = record.enabled !== false && record.status !== "paused";
@@ -1779,11 +2080,29 @@ export function createControlCenterService(options: ControlCenterServiceOptions 
           dataSource: "live"
         };
       });
+
+      return [...localSchedules, ...collectors.schedules];
     },
 
     async getSettings(): Promise<ControlCenterSettings> {
-      const { config, status, fallback } = await loadContext();
-      return buildSettings(config, status, fallback);
+      const { config, status, fallback, collectors } = await loadContext();
+      const settings = buildSettings(config, status, fallback);
+      const localNode: ControlCenterNodeInfo = {
+        id: prefixCollectorId("local-node", "node"),
+        name: settings.deployInfo.host,
+        host: settings.deployInfo.host,
+        status: "healthy",
+        lastCollectedAt: formatDateTime(nowProvider()),
+        agentCount: sourceMode === "collector" ? 0 : 1,
+        runCount: 0,
+        dataSource: sourceMode === "collector" ? "mock" : "live",
+        dataSourceNote: sourceMode === "collector" ? "当前节点以采集器模式运行，本地直读结果不计入展示。" : undefined
+      };
+
+      return {
+        ...settings,
+        nodes: sourceMode === "collector" ? collectors.nodes : [localNode, ...collectors.nodes]
+      };
     },
 
     async getDashboard(): Promise<ControlCenterDashboard> {
@@ -1839,10 +2158,10 @@ export function createControlCenterService(options: ControlCenterServiceOptions 
           },
           {
             label: "部署主机",
-            value: 1,
+            value: Math.max(new Set(agents.map((agent) => agent.machine.host)).size, 1),
             change: 0,
-            dataSource: "mock",
-            dataSourceNote: "当前仍为单机部署"
+            dataSource: agents.length > 0 ? "live" : "mock",
+            dataSourceNote: agents.length > 0 ? undefined : "当前仍为单机部署"
           }
         ],
         services,
@@ -1890,6 +2209,48 @@ export function createControlCenterService(options: ControlCenterServiceOptions 
         })),
         generatedAt: formatDateTime(nowProvider())
       };
+    },
+
+    async buildCollectorReport(node?: { id?: string; name?: string; host?: string }) {
+      const localService = createControlCenterService({
+        openclawHome,
+        controlPlaneProvider,
+        now: nowProvider,
+        collectorStorePath,
+        includeCollectorReports: false,
+        sourceMode: "local"
+      });
+      const [agents, runs, schedules, settings] = await Promise.all([
+        localService.listAgents(),
+        localService.listRuns(),
+        localService.listSchedules(),
+        localService.getSettings()
+      ]);
+      const agentDetails = (await Promise.all(agents.map((agent) => localService.getAgentDetail(agent.id)))).filter(
+        Boolean
+      ) as ControlCenterAgentDetail[];
+      const runDetails = (await Promise.all(runs.map((run) => localService.getRunDetail(run.id)))).filter(
+        Boolean
+      ) as ControlCenterRunDetail[];
+
+      return {
+        node: {
+          id: node?.id || slugify(os.hostname()),
+          name: node?.name || os.hostname(),
+          host: node?.host || os.hostname()
+        },
+        collectedAt: formatDateTime(nowProvider()),
+        agents,
+        agentDetails,
+        runs,
+        runDetails,
+        schedules,
+        settings
+      };
+    },
+
+    async ingestCollectorReport(report: CollectorNodeReport) {
+      return upsertCollectorReport(collectorStorePath, report);
     }
   };
 }
