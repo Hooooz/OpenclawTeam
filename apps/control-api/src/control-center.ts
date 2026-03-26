@@ -1632,7 +1632,15 @@ function normalizeCollectorMachine(
 }
 
 function normalizeCollectorNodes(reports: CollectorNodeReport[], now: Date): ControlCenterNodeInfo[] {
-  return reports.map((report) => {
+  const latestByNodeId = new Map<string, CollectorNodeReport>();
+  for (const report of reports) {
+    const existing = latestByNodeId.get(report.node.id);
+    if (!existing || new Date(report.collectedAt) > new Date(existing.collectedAt)) {
+      latestByNodeId.set(report.node.id, report);
+    }
+  }
+
+  return Array.from(latestByNodeId.values()).map((report) => {
     const collectedAt = report.collectedAt || "—";
     const collectedDate = new Date(collectedAt.replace(" ", "T"));
     const diffMinutes = Number.isNaN(collectedDate.getTime())
