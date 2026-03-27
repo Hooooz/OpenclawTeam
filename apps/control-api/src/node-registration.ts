@@ -1,6 +1,3 @@
-import { getCollectorReportsStorePath } from "./collector-store.js";
-import { getControlPlaneStorageInfo } from "./store.js";
-
 export type RegistrationPlatform = "macos" | "linux" | "windows";
 
 export type NodeRegistrationInstaller = {
@@ -17,22 +14,12 @@ export type NodeRegistrationInstaller = {
 export type NodeRegistrationBundle = {
   managerUrl: string;
   collectorTokenHint: string;
-  storage: {
-    controlPlaneDataFile: string;
-    schedulerHeartbeatFile: string;
-    collectorReportsFile: string;
-  };
   installers: NodeRegistrationInstaller[];
 };
 
 type BundleOptions = {
   managerUrl: string;
   collectorToken: string;
-  storage?: {
-    controlPlaneDataFile: string;
-    schedulerHeartbeatFile: string;
-    collectorReportsFile: string;
-  };
 };
 
 function maskToken(token: string) {
@@ -169,16 +156,9 @@ Write-Output "Windows collector registration completed."
 }
 
 export function buildNodeRegistrationBundle(options: BundleOptions): NodeRegistrationBundle {
-  const storage =
-    options.storage || {
-      ...getControlPlaneStorageInfo(),
-      collectorReportsFile: getCollectorReportsStorePath()
-    };
-
   return {
     managerUrl: options.managerUrl,
     collectorTokenHint: maskToken(options.collectorToken),
-    storage,
     installers: [
       {
         platform: "macos",

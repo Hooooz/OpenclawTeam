@@ -39,6 +39,13 @@ const dataDir = process.env.CONTROL_PLANE_DATA_DIR?.trim()
 const dataFile = path.join(dataDir, "control-plane.json");
 const schedulerHeartbeatFile = path.join(dataDir, "schedule-sweep-heartbeat.json");
 
+export function getControlPlaneStorageInfo() {
+  return {
+    controlPlaneDataFile: dataFile,
+    schedulerHeartbeatFile
+  };
+}
+
 const defaultStore: ControlPlaneStore = {
   agents: seedAgents,
   skills: seedSkills,

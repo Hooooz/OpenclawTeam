@@ -24,6 +24,7 @@ async function createFixture() {
   const tempDir = await mkdtemp(path.join(os.tmpdir(), "openclaw-collector-integration-"));
   const openclawHome = path.join(tempDir, ".openclaw");
   const collectorStorePath = path.join(tempDir, ".runtime", "collector-reports.json");
+  const nodeMetadataStorePath = path.join(tempDir, ".runtime", "node-metadata.json");
 
   await writeJson(path.join(openclawHome, "openclaw.json"), {
     meta: {
@@ -190,7 +191,7 @@ async function createFixture() {
     },
   };
 
-  return { tempDir, openclawHome, collectorStorePath, fallback };
+  return { tempDir, openclawHome, collectorStorePath, nodeMetadataStorePath, fallback };
 }
 
 test("collector mode serves reported remote nodes without local direct data", async () => {
@@ -267,6 +268,40 @@ test("buildCollectorReport rewrites live machine info to the reporting node", as
     assert.equal(report.agents[0]?.machine.host, "local-macbook");
     assert.equal(report.agentDetails[0]?.machine.host, "local-macbook");
     assert.equal(report.settings.deployInfo.host, "local-macbook");
+  } finally {
+    await rm(tempDir, { recursive: true, force: true });
+  }
+});
+
+test("collector aliases override node and machine display names", async () => {
+  const { tempDir, openclawHome, collectorStorePath, nodeMetadataStorePath, fallback } = await createFixture();
+
+  try {
+    await writeJson(nodeMetadataStorePath, [
+      {
+        nodeId: "server-node",
+        alias: "虾远端一号机",
+        updatedAt: "2026-03-26 11:00",
+      },
+    ]);
+
+    const { createControlCenterService } = await loadControlCenterModule();
+    const service = createControlCenterService({
+      openclawHome,
+      collectorStorePath,
+      nodeMetadataStorePath,
+      sourceMode: "collector",
+      controlPlaneProvider: async () => fallback,
+      now: () => new Date("2026-03-26T10:00:00.000Z"),
+    });
+
+    const agents = await service.listAgents();
+    const settings = await service.getSettings();
+
+    assert.equal(settings.nodes[0]?.name, "虾远端一号机");
+    assert.equal(settings.nodes[0]?.originalName, "远端服务器");
+    assert.equal(agents[0]?.machine.name, "虾远端一号机");
+    assert.equal(agents[0]?.machine.originalName, "100.80.81.15");
   } finally {
     await rm(tempDir, { recursive: true, force: true });
   }

@@ -105,7 +105,7 @@ export default function Index() {
       <div className="mx-auto max-w-[1400px] space-y-6 p-6">
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-lg font-semibold text-foreground">控制台总览</h1>
+            <h1 className="text-lg font-semibold gradient-text">控制台总览</h1>
             <p className="mt-0.5 text-xs text-muted-foreground">
               最后刷新：{dashboardQuery.data?.generatedAt ?? "演示数据"}
             </p>
@@ -114,19 +114,19 @@ export default function Index() {
             <Button
               variant="outline"
               size="sm"
-              className="gap-1.5 text-xs"
+              className="gap-1.5 text-xs border-border/50 hover:border-primary/40 hover:bg-primary/5 transition-all"
               onClick={() => void dashboardQuery.refetch()}
             >
               <RefreshCw className="h-3.5 w-3.5" />
               刷新
             </Button>
-            <Button size="sm" className="gap-1.5 text-xs" asChild>
+            <Button size="sm" className="gap-1.5 text-xs gradient-blue-purple border-0 hover:opacity-90 glow-blue transition-all" asChild>
               <Link to="/agents">
                 <Plus className="h-3.5 w-3.5" />
                 新建数字员工
               </Link>
             </Button>
-            <Button variant="outline" size="sm" className="gap-1.5 text-xs" asChild>
+            <Button variant="outline" size="sm" className="gap-1.5 text-xs border-border/50 hover:border-primary/40 hover:bg-primary/5 transition-all" asChild>
               <Link to="/schedules">
                 <CalendarPlus className="h-3.5 w-3.5" />
                 创建定时任务
@@ -135,7 +135,7 @@ export default function Index() {
             <Button
               variant="outline"
               size="sm"
-              className="gap-1.5 border-destructive/30 text-xs text-destructive hover:bg-destructive/5"
+              className="gap-1.5 border-destructive/20 text-xs text-destructive hover:bg-destructive/10 hover:border-destructive/40 transition-all"
               asChild
             >
               <Link to="/runs">
@@ -155,7 +155,7 @@ export default function Index() {
         </div>
 
         <div className="grid gap-4 xl:grid-cols-[1.35fr_1fr]">
-          <div className="rounded-md border bg-card p-5 shadow-sm">
+          <div className="glass-card rounded-lg p-5">
             <div className="mb-4 flex items-start justify-between gap-4">
               <div>
                 <h3 className="text-sm font-medium text-foreground">数字员工核心看板</h3>
@@ -163,14 +163,14 @@ export default function Index() {
                   聚合今天的任务产出、文件交付和节约成本，作为数字员工控制台的第一优先指标。
                 </p>
               </div>
-              <span className="rounded-full bg-muted px-2.5 py-1 text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
+              <span className="rounded-full bg-primary/10 text-primary px-2.5 py-1 text-[10px] uppercase tracking-[0.18em] font-medium">
                 Weekly cockpit
               </span>
             </div>
 
             <div className="grid gap-3 md:grid-cols-3">
               {[workbench.today.tasks, workbench.today.files, workbench.today.savings].map((item) => (
-                <div key={item.label} className="rounded-md border bg-background/70 p-4">
+                <div key={item.label} className="rounded-md border border-border/30 bg-background/30 p-4 hover:bg-white/[0.03] transition-colors">
                   <div className="flex items-center justify-between gap-2">
                     <p className="text-xs uppercase tracking-wider text-muted-foreground">{item.label}</p>
                     <DataSourceBadge item={item} className="px-1.5 py-0 text-[9px]" />
@@ -185,7 +185,7 @@ export default function Index() {
             </div>
           </div>
 
-          <div className="rounded-md border bg-card p-5 shadow-sm">
+          <div className="glass-card rounded-lg p-5">
             <div className="mb-4 flex items-center justify-between">
               <div>
                 <h3 className="text-sm font-medium text-foreground">每周数据看板</h3>
@@ -193,7 +193,7 @@ export default function Index() {
               </div>
             </div>
 
-            <div className="rounded-md border bg-background/70 p-3">
+            <div className="rounded-md border border-border/30 bg-background/30 p-3">
               <ChartContainer config={weeklyChartConfig} className="h-[260px] w-full">
                 <LineChart data={workbench.weekly} margin={{ top: 12, right: 12, left: -20, bottom: 0 }}>
                   <CartesianGrid vertical={false} strokeDasharray="3 3" />
@@ -290,9 +290,9 @@ export default function Index() {
                 </Link>
               </Button>
             </div>
-            <div className="overflow-hidden rounded-md border bg-card shadow-sm">
-              <div className="grid grid-cols-[88px_1fr] border-b bg-muted/40 px-4 py-2 text-[11px] uppercase tracking-wider text-muted-foreground">
-                <span>Live</span>
+            <div className="overflow-hidden rounded-lg glass-card">
+              <div className="grid grid-cols-[88px_1fr] border-b border-border/30 bg-primary/5 px-4 py-2 text-[11px] uppercase tracking-wider text-muted-foreground">
+                <span className="text-primary font-medium">Live</span>
                 <span>实时工作流</span>
               </div>
               <div className="dashboard-feed-mask h-[360px] overflow-hidden">
@@ -300,7 +300,7 @@ export default function Index() {
                   {[...workbench.feed, ...workbench.feed].map((run, index) => (
                     <div
                       key={`${run.id}-${index}`}
-                      className="grid grid-cols-[88px_1fr] gap-3 border-b px-4 py-3 last:border-b-0"
+                      className="grid grid-cols-[88px_1fr] gap-3 border-b border-border/20 px-4 py-3 last:border-b-0 hover:bg-white/[0.02] transition-colors"
                     >
                       <div className="space-y-1">
                         <StatusBadge variant={run.status} />
@@ -339,7 +339,7 @@ export default function Index() {
               </Link>
             </Button>
           </div>
-          <div className="overflow-hidden rounded-md border bg-card shadow-sm">
+          <div className="overflow-hidden rounded-lg glass-card">
             <Table>
               <TableHeader>
                 <TableRow className="hover:bg-transparent">
@@ -353,7 +353,7 @@ export default function Index() {
               </TableHeader>
               <TableBody>
                 {dashboard.schedules.map((schedule) => (
-                  <TableRow key={schedule.id}>
+                  <TableRow key={schedule.id} className="table-row-glow transition-all">
                     <TableCell className="text-sm">
                       <div className="flex items-center gap-2">
                         <span>{schedule.planName}</span>

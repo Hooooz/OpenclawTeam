@@ -1,14 +1,17 @@
-import { useMemo, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
-import { Copy, Database, Download, HardDrive, TerminalSquare, ChevronDown, ChevronRight, Clock, Activity } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { Copy, Download, HardDrive, TerminalSquare, ChevronDown, ChevronRight, Clock, Activity, PencilLine, Save } from "lucide-react";
 import { DashboardLayout } from "@/components/DashboardLayout";
 import { DataSourceBadge } from "@/components/DataSourceBadge";
 import { MockDataNotice } from "@/components/MockDataNotice";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { toast } from "@/components/ui/use-toast";
 import {
   collectMockNotes,
   fetchControlCenterNodeManagement,
   fetchControlCenterNodeDetail,
+  updateControlCenterNodeAlias,
   toMockProvenance,
   type NodeManagementData,
   type NodeDetailData,
@@ -30,11 +33,6 @@ const fallbackNodeManagement: NodeManagementData = {
   registration: {
     managerUrl: "http://127.0.0.1:3201",
     collectorTokenHint: "open...ctor",
-    storage: {
-      controlPlaneDataFile: "./data/control-plane.json",
-      schedulerHeartbeatFile: "./data/schedule-sweep-heartbeat.json",
-      collectorReportsFile: "./.runtime/collector-reports.json",
-    },
     installers: [
       {
         platform: "macos",
@@ -69,6 +67,9 @@ const fallbackNodeDetail: NodeDetailData = {
 export default function Nodes() {
   const [selectedPlatform, setSelectedPlatform] = useState<"macos" | "linux" | "windows">("macos");
   const [expandedNodeId, setExpandedNodeId] = useState<string | null>(null);
+  const [editingNodeId, setEditingNodeId] = useState<string | null>(null);
+  const [aliasDraft, setAliasDraft] = useState("");
+  const queryClient = useQueryClient();
   const nodeManagementQuery = useQuery({
     queryKey: ["control-center", "node-management"],
     queryFn: fetchControlCenterNodeManagement,
@@ -78,6 +79,24 @@ export default function Nodes() {
     queryKey: ["control-center", "node", expandedNodeId],
     queryFn: () => fetchControlCenterNodeDetail(expandedNodeId!),
     enabled: !!expandedNodeId,
+  });
+  const aliasMutation = useMutation({
+    mutationFn: ({ nodeId, alias }: { nodeId: string; alias: string }) => updateControlCenterNodeAlias(nodeId, alias),
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["control-center", "node-management"] }),
+        queryClient.invalidateQueries({ queryKey: ["control-center", "settings"] }),
+        queryClient.invalidateQueries({ queryKey: ["control-center", "agents"] }),
+        queryClient.invalidateQueries({ queryKey: ["control-center", "agent"] }),
+        queryClient.invalidateQueries({ queryKey: ["control-center", "node", expandedNodeId] }),
+      ]);
+      setEditingNodeId(null);
+      setAliasDraft("");
+      toast({
+        title: "节点备注已更新",
+        description: "新的备注名会同步显示在节点列表和机器展示中。",
+      });
+    },
   });
 
   const data = nodeManagementQuery.data ?? fallbackNodeManagement;
@@ -94,6 +113,16 @@ export default function Nodes() {
   const selectedInstaller =
     data.registration.installers.find((item) => item.platform === selectedPlatform) ||
     data.registration.installers[0];
+
+  useEffect(() => {
+    if (!editingNodeId) {
+      setAliasDraft("");
+      return;
+    }
+
+    const node = data.nodes.find((item) => item.id === editingNodeId);
+    setAliasDraft(node?.name || "");
+  }, [editingNodeId, data.nodes]);
 
   const statusTone = useMemo(
     () => ({
@@ -116,6 +145,18 @@ export default function Nodes() {
     setExpandedNodeId(expandedNodeId === nodeId ? null : nodeId);
   };
 
+  const startEditing = (nodeId: string, currentName: string) => {
+    setEditingNodeId(nodeId);
+    setAliasDraft(currentName);
+  };
+
+  const saveAlias = (nodeId: string) => {
+    aliasMutation.mutate({
+      nodeId,
+      alias: aliasDraft,
+    });
+  };
+
   return (
     <DashboardLayout>
       <div className="mx-auto max-w-[1400px] space-y-6 p-6">
@@ -128,8 +169,7 @@ export default function Nodes() {
 
         <MockDataNotice notes={[...new Set(mockNotes.filter(Boolean))]} />
 
-        <div className="grid grid-cols-[1.1fr_0.9fr] gap-4">
-          <div className="rounded-md border bg-card p-4 shadow-sm">
+        <div className="rounded-md border bg-card p-4 shadow-sm">
             <div className="mb-3 flex items-center justify-between">
               <h3 className="flex items-center gap-1.5 text-sm font-medium">
                 <HardDrive className="h-4 w-4" />
@@ -144,23 +184,58 @@ export default function Nodes() {
                   className="rounded-md border border-border/60 bg-muted/40 px-3 py-3 text-sm"
                 >
                   <div className="flex items-center justify-between gap-3">
-                    <button
-                      type="button"
-                      className="flex items-center gap-2 hover:opacity-80"
-                      onClick={() => toggleNodeDetail(node.id)}
-                    >
-                      {expandedNodeId === node.id ? (
-                        <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        className="flex items-center gap-2 hover:opacity-80"
+                        onClick={() => toggleNodeDetail(node.id)}
+                      >
+                        {expandedNodeId === node.id ? (
+                          <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                        ) : (
+                          <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                        )}
+                      </button>
+                      {editingNodeId === node.id ? (
+                        <div className="flex items-center gap-2">
+                          <Input
+                            value={aliasDraft}
+                            onChange={(event) => setAliasDraft(event.target.value)}
+                            className="h-8 w-[220px]"
+                            placeholder={node.originalName || node.host}
+                          />
+                          <Button
+                            type="button"
+                            size="sm"
+                            onClick={() => saveAlias(node.id)}
+                            disabled={aliasMutation.isPending}
+                          >
+                            <Save className="mr-1.5 h-3.5 w-3.5" />
+                            保存
+                          </Button>
+                        </div>
                       ) : (
-                        <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                        <>
+                          <span className="font-medium text-foreground">{node.name}</span>
+                          <DataSourceBadge item={node} className="px-1.5 py-0 text-[9px]" />
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            className="h-7 px-2 text-xs"
+                            onClick={() => startEditing(node.id, node.name)}
+                          >
+                            <PencilLine className="mr-1.5 h-3.5 w-3.5" />
+                            备注名
+                          </Button>
+                        </>
                       )}
-                      <span className="font-medium text-foreground">{node.name}</span>
-                      <DataSourceBadge item={node} className="px-1.5 py-0 text-[9px]" />
-                    </button>
+                    </div>
                     <span className={`text-xs font-medium ${statusTone[node.status]}`}>{node.status}</span>
                   </div>
-                  <div className="mt-2 grid grid-cols-4 gap-2 text-xs text-muted-foreground">
+                  <div className="mt-2 grid grid-cols-5 gap-2 text-xs text-muted-foreground">
                     <span>Host: {node.host}</span>
+                    <span>原始名: {node.originalName || "—"}</span>
                     <span>员工 {node.agentCount}</span>
                     <span>记录 {node.runCount}</span>
                     <span>最近采集 {node.lastCollectedAt}</span>
@@ -174,6 +249,10 @@ export default function Nodes() {
                       </div>
                       {nodeDetailQuery.isLoading ? (
                         <div className="text-xs text-muted-foreground">加载中...</div>
+                      ) : nodeDetailQuery.isError ? (
+                        <div className="text-xs text-[hsl(var(--status-danger))]">
+                          节点明细加载失败，请稍后重试。
+                        </div>
                       ) : (
                         <div className="space-y-1.5">
                           {nodeDetailQuery.data?.recentReports.map((report, idx) => (
@@ -197,26 +276,6 @@ export default function Nodes() {
               ))}
             </div>
           </div>
-
-          <div className="rounded-md border bg-card p-4 shadow-sm">
-            <h3 className="mb-3 flex items-center gap-1.5 text-sm font-medium">
-              <Database className="h-4 w-4" />
-              后端存储位置
-            </h3>
-            <div className="space-y-3 text-sm">
-              {[
-                { label: "控制面存量数据", value: data.registration.storage.controlPlaneDataFile },
-                { label: "调度心跳", value: data.registration.storage.schedulerHeartbeatFile },
-                { label: "采集器节点汇总", value: data.registration.storage.collectorReportsFile },
-              ].map((item) => (
-                <div key={item.label} className="rounded-md bg-muted px-3 py-2">
-                  <div className="text-xs text-muted-foreground">{item.label}</div>
-                  <div className="mt-1 break-all font-mono text-[11px] text-foreground">{item.value}</div>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
 
         <div className="rounded-md border bg-card p-4 shadow-sm">
           <div className="mb-4 flex items-center justify-between gap-4">
@@ -288,23 +347,23 @@ export default function Nodes() {
                   </ul>
                 </div>
 
-                <div className="rounded-md border border-border/60 bg-[#0f172a] p-3">
+                <div className="rounded-md border border-border/60 bg-[hsl(var(--sidebar-background))] p-3">
                   <div className="mb-2 flex items-center justify-between">
-                    <span className="text-xs uppercase tracking-widest text-slate-400">
+                    <span className="text-xs uppercase tracking-widest text-muted-foreground">
                       {selectedInstaller.shell}
                     </span>
                     <Button
                       type="button"
                       variant="ghost"
                       size="sm"
-                      className="h-7 text-slate-300 hover:bg-slate-800 hover:text-white"
+                      className="h-7 text-muted-foreground hover:bg-muted hover:text-foreground"
                       onClick={() => copyText(selectedInstaller.script)}
                     >
                       <Copy className="mr-1.5 h-3.5 w-3.5" />
                       复制
                     </Button>
                   </div>
-                  <pre className="max-h-[420px] overflow-auto whitespace-pre-wrap break-words text-xs leading-6 text-slate-100">
+                  <pre className="max-h-[420px] overflow-auto whitespace-pre-wrap break-words text-xs leading-6 text-foreground">
                     {selectedInstaller.script}
                   </pre>
                 </div>

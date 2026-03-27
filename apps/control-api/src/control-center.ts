@@ -2,7 +2,13 @@ import { access, readFile, readdir, stat } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { getDashboardSnapshot } from "./store.js";
-import { readCollectorReports, upsertCollectorReport, type CollectorNodeReport } from "./collector-store.js";
+import {
+  readCollectorReports,
+  readNodeMetadata,
+  upsertCollectorReport,
+  type CollectorNodeReport,
+  type NodeMetadataRecord
+} from "./collector-store.js";
 
 type LegacyFallback = Awaited<ReturnType<typeof getDashboardSnapshot>>;
 
@@ -126,6 +132,7 @@ export type ControlCenterTriggerSource = "manual" | "timed-task" | "template" | 
 export type ControlCenterMachineInfo = {
   id: string;
   name: string;
+  originalName?: string;
   host: string;
   runtime: string;
   status: "healthy" | "degraded" | "down";
@@ -286,6 +293,7 @@ export type ControlCenterSettings = {
 export type ControlCenterNodeInfo = {
   id: string;
   name: string;
+  originalName?: string;
   host: string;
   status: "healthy" | "degraded" | "down";
   lastCollectedAt: string;
@@ -333,6 +341,7 @@ type ControlCenterServiceOptions = {
   controlPlaneProvider?: () => Promise<LegacyFallback>;
   now?: () => Date;
   collectorStorePath?: string;
+  nodeMetadataStorePath?: string;
   includeCollectorReports?: boolean;
   sourceMode?: "local" | "hybrid" | "collector";
 };
@@ -417,6 +426,12 @@ function defaultCollectorStorePath() {
   return process.env.CONTROL_CENTER_COLLECTOR_STORE?.trim()
     ? path.resolve(process.env.CONTROL_CENTER_COLLECTOR_STORE)
     : path.resolve(process.cwd(), ".runtime", "collector-reports.json");
+}
+
+function defaultNodeMetadataStorePath() {
+  return process.env.CONTROL_CENTER_NODE_METADATA_STORE?.trim()
+    ? path.resolve(process.env.CONTROL_CENTER_NODE_METADATA_STORE)
+    : path.resolve(process.cwd(), ".runtime", "node-metadata.json");
 }
 
 async function fileExists(filePath: string) {
@@ -1607,8 +1622,29 @@ function buildSettings(config: OpenClawConfig, status: OpenClawStatus, fallback:
   };
 }
 
-function prefixCollectorId(nodeId: string, value: string) {
-  return `collector-${slugify(nodeId)}__${value}`;
+function encodeCollectorNamespace(nodeId: string) {
+  return encodeURIComponent(nodeId);
+}
+
+export function prefixCollectorId(nodeId: string, value: string) {
+  return `collector-${encodeCollectorNamespace(nodeId)}__${value}`;
+}
+
+export function toCollectorPublicNodeId(nodeId: string) {
+  return prefixCollectorId(nodeId, "node");
+}
+
+export function resolveCollectorNodeId(nodeId: string) {
+  const match = /^collector-(.+)__node$/.exec(nodeId);
+  if (!match) {
+    return nodeId;
+  }
+
+  try {
+    return decodeURIComponent(match[1] || "");
+  } catch {
+    return match[1] || nodeId;
+  }
 }
 
 function appendCollectorNote(note: string | undefined, nodeName: string) {
@@ -1616,13 +1652,20 @@ function appendCollectorNote(note: string | undefined, nodeName: string) {
   return note ? `${prefix} · ${note}` : prefix;
 }
 
+function getNodeAlias(nodeId: string, metadata: NodeMetadataRecord[]) {
+  return metadata.find((item) => item.nodeId === nodeId)?.alias?.trim() || "";
+}
+
 function normalizeCollectorMachine(
   machine: Partial<ControlCenterMachineInfo> | undefined,
-  report: CollectorNodeReport
+  report: CollectorNodeReport,
+  metadata: NodeMetadataRecord[]
 ): ControlCenterMachineInfo {
+  const alias = getNodeAlias(report.node.id, metadata);
   return {
     id: prefixCollectorId(report.node.id, machine?.id || report.node.id),
-    name: machine?.name || report.node.name,
+    name: alias || machine?.name || report.node.name,
+    originalName: machine?.name || report.node.name,
     host: machine?.host || report.node.host,
     runtime: machine?.runtime || report.node.host,
     status: machine?.status || "healthy",
@@ -1631,7 +1674,11 @@ function normalizeCollectorMachine(
   };
 }
 
-function normalizeCollectorNodes(reports: CollectorNodeReport[], now: Date): ControlCenterNodeInfo[] {
+function normalizeCollectorNodes(
+  reports: CollectorNodeReport[],
+  now: Date,
+  metadata: NodeMetadataRecord[]
+): ControlCenterNodeInfo[] {
   const latestByNodeId = new Map<string, CollectorNodeReport>();
   for (const report of reports) {
     const existing = latestByNodeId.get(report.node.id);
@@ -1648,9 +1695,11 @@ function normalizeCollectorNodes(reports: CollectorNodeReport[], now: Date): Con
       : Math.max(0, Math.round((now.getTime() - collectedDate.getTime()) / 60_000));
     const status = diffMinutes <= 15 ? "healthy" : diffMinutes <= 60 ? "degraded" : "down";
 
+    const alias = getNodeAlias(report.node.id, metadata);
     return {
-      id: prefixCollectorId(report.node.id, "node"),
-      name: report.node.name,
+      id: toCollectorPublicNodeId(report.node.id),
+      name: alias || report.node.name,
+      originalName: report.node.name,
       host: report.node.host,
       status,
       lastCollectedAt: collectedAt,
@@ -1664,7 +1713,8 @@ function normalizeCollectorNodes(reports: CollectorNodeReport[], now: Date): Con
 
 function normalizeCollectorAgent(
   raw: unknown,
-  report: CollectorNodeReport
+  report: CollectorNodeReport,
+  metadata: NodeMetadataRecord[]
 ): ControlCenterAgentListItem | null {
   const agent = raw as Partial<ControlCenterAgentListItem> | null;
   if (!agent?.id || !agent.name) {
@@ -1689,7 +1739,7 @@ function normalizeCollectorAgent(
     group: agent.group || "远端节点",
     communicationStyle: agent.communicationStyle || "稳定执行",
     specialties: Array.isArray(agent.specialties) ? agent.specialties : [],
-    machine: normalizeCollectorMachine(agent.machine, report),
+    machine: normalizeCollectorMachine(agent.machine, report, metadata),
     channelCount: agent.channelCount || 0,
     openclawCount: agent.openclawCount || 1,
     dataSource: agent.dataSource || "live",
@@ -1764,10 +1814,11 @@ function normalizeCollectorSchedule(
 
 function normalizeCollectorAgentDetail(
   raw: unknown,
-  report: CollectorNodeReport
+  report: CollectorNodeReport,
+  metadata: NodeMetadataRecord[]
 ): ControlCenterAgentDetail | null {
   const detail = raw as Partial<ControlCenterAgentDetail> | null;
-  const base = normalizeCollectorAgent(raw, report);
+  const base = normalizeCollectorAgent(raw, report, metadata);
   if (!base) {
     return null;
   }
@@ -1867,11 +1918,15 @@ function normalizeCollectorRunDetail(
   };
 }
 
-function buildCollectorAggregation(reports: CollectorNodeReport[], now: Date) {
+function buildCollectorAggregation(
+  reports: CollectorNodeReport[],
+  now: Date,
+  metadata: NodeMetadataRecord[]
+) {
   return {
-    nodes: normalizeCollectorNodes(reports, now),
-    agents: reports.flatMap((report) => (report.agents || []).map((item) => normalizeCollectorAgent(item, report)).filter(Boolean) as ControlCenterAgentListItem[]),
-    agentDetails: reports.flatMap((report) => (report.agentDetails || []).map((item) => normalizeCollectorAgentDetail(item, report)).filter(Boolean) as ControlCenterAgentDetail[]),
+    nodes: normalizeCollectorNodes(reports, now, metadata),
+    agents: reports.flatMap((report) => (report.agents || []).map((item) => normalizeCollectorAgent(item, report, metadata)).filter(Boolean) as ControlCenterAgentListItem[]),
+    agentDetails: reports.flatMap((report) => (report.agentDetails || []).map((item) => normalizeCollectorAgentDetail(item, report, metadata)).filter(Boolean) as ControlCenterAgentDetail[]),
     runs: reports.flatMap((report) => (report.runs || []).map((item) => normalizeCollectorRun(item, report)).filter(Boolean) as ControlCenterRunListItem[]),
     runDetails: reports.flatMap((report) => (report.runDetails || []).map((item) => normalizeCollectorRunDetail(item, report)).filter(Boolean) as ControlCenterRunDetail[]),
     schedules: reports.flatMap((report) => (report.schedules || []).map((item) => normalizeCollectorSchedule(item, report)).filter(Boolean) as ControlCenterScheduleListItem[])
@@ -1897,6 +1952,9 @@ export function createControlCenterService(options: ControlCenterServiceOptions 
   const collectorStorePath = options.collectorStorePath
     ? path.resolve(options.collectorStorePath)
     : defaultCollectorStorePath();
+  const nodeMetadataStorePath = options.nodeMetadataStorePath
+    ? path.resolve(options.nodeMetadataStorePath)
+    : defaultNodeMetadataStorePath();
   const includeCollectorReports = options.includeCollectorReports ?? true;
   const sourceMode = options.sourceMode || ((process.env.CONTROL_CENTER_SOURCE_MODE as "local" | "hybrid" | "collector" | undefined) ?? "local");
 
@@ -1910,8 +1968,10 @@ export function createControlCenterService(options: ControlCenterServiceOptions 
     const collectorEnabled = includeCollectorReports && sourceMode !== "local";
     const liveAgents = localEnabled ? await loadLiveAgents(openclawHome, config, now) : [];
     const liveEmployees = liveAgents.length > 0 ? [buildEmployeeContext(liveAgents, fallback)] : [];
-    const collectorReports = collectorEnabled ? await readCollectorReports(collectorStorePath) : [];
-    const collectors = buildCollectorAggregation(collectorReports, now);
+    const [collectorReports, nodeMetadata] = collectorEnabled
+      ? await Promise.all([readCollectorReports(collectorStorePath), readNodeMetadata(nodeMetadataStorePath)])
+      : [[], []];
+    const collectors = buildCollectorAggregation(collectorReports, now, nodeMetadata);
     return {
       now,
       config,

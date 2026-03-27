@@ -72,7 +72,7 @@ export default function Runs() {
     <DashboardLayout>
       <div className="mx-auto max-w-[1400px] space-y-5 p-6">
         <div>
-          <h1 className="text-lg font-semibold text-foreground">对话与工作记录</h1>
+          <h1 className="text-lg font-semibold gradient-text">对话与工作记录</h1>
           <p className="mt-0.5 text-xs text-muted-foreground">
             共 {runs.length} 条记录，{runs.filter((run) => run.status === "failed").length} 条失败
           </p>
@@ -85,7 +85,7 @@ export default function Runs() {
             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
             <Input
               placeholder="搜索任务名、数字员工或对话主题…"
-              className="h-9 pl-9 text-sm"
+              className="h-9 pl-9 text-sm bg-muted/30 border-border/50 input-glow focus:border-primary/40"
               value={search}
               onChange={(event) => setSearch(event.target.value)}
             />
@@ -117,7 +117,7 @@ export default function Runs() {
           </Select>
         </div>
 
-        <div className="overflow-hidden rounded-md border bg-card shadow-sm">
+        <div className="overflow-hidden rounded-lg glass-card">
           <Table>
             <TableHeader>
               <TableRow className="hover:bg-transparent">
@@ -135,7 +135,7 @@ export default function Runs() {
             </TableHeader>
             <TableBody>
               {filtered.map((run) => (
-                <TableRow key={run.id}>
+                <TableRow key={run.id} className="table-row-glow transition-all">
                   <TableCell className="text-xs font-mono text-muted-foreground">{run.runId}</TableCell>
                   <TableCell>
                     <div>

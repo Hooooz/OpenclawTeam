@@ -63,12 +63,12 @@ export default function Agents() {
       <div className="mx-auto max-w-[1400px] space-y-5 p-6">
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-lg font-semibold text-foreground">数字员工管理</h1>
+            <h1 className="text-lg font-semibold gradient-text">数字员工管理</h1>
             <p className="mt-0.5 text-xs text-muted-foreground">
               共 {agents.length} 位数字员工，{agents.filter((agent) => agent.status === "running").length} 位工作中
             </p>
           </div>
-          <Button size="sm" className="gap-1.5 text-xs">
+          <Button size="sm" className="gap-1.5 text-xs gradient-blue-purple border-0 hover:opacity-90 glow-blue transition-all">
             <Plus className="h-3.5 w-3.5" />
             新建数字员工
           </Button>
@@ -81,7 +81,7 @@ export default function Agents() {
             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
             <Input
               placeholder="搜索姓名、职位或部门…"
-              className="h-9 pl-9 text-sm"
+              className="h-9 pl-9 text-sm bg-muted/30 border-border/50 input-glow focus:border-primary/40"
               value={search}
               onChange={(event) => setSearch(event.target.value)}
             />
@@ -101,7 +101,7 @@ export default function Agents() {
           </Select>
         </div>
 
-        <div className="overflow-hidden rounded-md border bg-card shadow-sm">
+        <div className="overflow-hidden rounded-lg glass-card">
           <Table>
             <TableHeader>
               <TableRow className="hover:bg-transparent">
@@ -118,10 +118,10 @@ export default function Agents() {
             </TableHeader>
             <TableBody>
               {filtered.map((agent) => (
-                <TableRow key={agent.id}>
+                <TableRow key={agent.id} className="table-row-glow transition-all">
                   <TableCell>
                     <div className="flex items-center gap-2.5">
-                      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-muted">
+                      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-primary/20 to-accent/20 border border-primary/20">
                         <span className="text-xs font-medium text-foreground">{agent.avatar}</span>
                       </div>
                       <div>

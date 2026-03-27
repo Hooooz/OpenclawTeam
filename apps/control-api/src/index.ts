@@ -23,10 +23,16 @@ import {
   updateScheduleStatus,
   updateAgentSkillBindings
 } from "./store.js";
-import { createControlCenterService } from "./control-center.js";
+import { createControlCenterService, resolveCollectorNodeId, toCollectorPublicNodeId } from "./control-center.js";
 import type { CollectorNodeReport } from "./collector-store.js";
 import { buildNodeRegistrationBundle } from "./node-registration.js";
-import { readCollectorReports, getCollectorReportsStorePath } from "./collector-store.js";
+import {
+  readCollectorReports,
+  getCollectorReportsStorePath,
+  getNodeMetadataStorePath,
+  readNodeMetadata,
+  upsertNodeMetadata
+} from "./collector-store.js";
 
 const host = process.env.HOST || "0.0.0.0";
 const port = Number(process.env.PORT || 3201);
@@ -116,8 +122,15 @@ app.get("/api/control-center/node-management", async (request) => {
 });
 app.get<{ Params: { nodeId: string } }>("/api/control-center/nodes/:nodeId", async (request, reply) => {
   const storePath = getCollectorReportsStorePath();
+  const metadataStorePath = getNodeMetadataStorePath();
   const reports = await readCollectorReports(storePath);
-  const nodeReport = reports.find((r) => r.node.id === request.params.nodeId);
+  const metadata = await readNodeMetadata(metadataStorePath);
+  const rawNodeId = resolveCollectorNodeId(request.params.nodeId);
+  const matchingReports = reports
+    .filter((r) => r.node.id === rawNodeId)
+    .sort((a, b) => new Date(b.collectedAt).getTime() - new Date(a.collectedAt).getTime());
+  const nodeReport = matchingReports[0];
+  const nodeAlias = metadata.find((item) => item.nodeId === rawNodeId)?.alias?.trim() || "";
 
   if (!nodeReport) {
     return reply.status(404).send({
@@ -126,9 +139,7 @@ app.get<{ Params: { nodeId: string } }>("/api/control-center/nodes/:nodeId", asy
     });
   }
 
-  const recentReports = reports
-    .filter((r) => r.node.id === request.params.nodeId)
-    .sort((a, b) => new Date(b.collectedAt).getTime() - new Date(a.collectedAt).getTime())
+  const recentReports = matchingReports
     .slice(0, 10)
     .map((r) => ({
       collectedAt: r.collectedAt,
@@ -140,7 +151,12 @@ app.get<{ Params: { nodeId: string } }>("/api/control-center/nodes/:nodeId", asy
   return {
     ok: true,
     data: {
-      node: nodeReport.node,
+      node: {
+        ...nodeReport.node,
+        id: toCollectorPublicNodeId(rawNodeId),
+        name: nodeAlias || nodeReport.node.name,
+        originalName: nodeReport.node.name
+      },
       latestReport: {
         collectedAt: nodeReport.collectedAt,
         agentCount: nodeReport.agents?.length || 0,
@@ -154,6 +170,41 @@ app.get<{ Params: { nodeId: string } }>("/api/control-center/nodes/:nodeId", asy
     }
   };
 });
+app.patch<{ Params: { nodeId: string }; Body: { alias?: string } }>(
+  "/api/control-center/nodes/:nodeId",
+  async (request, reply) => {
+    const storePath = getCollectorReportsStorePath();
+    const metadataStorePath = getNodeMetadataStorePath();
+    const reports = await readCollectorReports(storePath);
+    const rawNodeId = resolveCollectorNodeId(request.params.nodeId);
+    const nodeReport = reports
+      .filter((item) => item.node.id === rawNodeId)
+      .sort((a, b) => new Date(b.collectedAt).getTime() - new Date(a.collectedAt).getTime())[0];
+
+    if (!nodeReport) {
+      return reply.status(404).send({
+        ok: false,
+        message: "Node not found"
+      });
+    }
+
+    const alias = String(request.body?.alias || "").trim();
+    await upsertNodeMetadata(metadataStorePath, {
+      nodeId: rawNodeId,
+      alias,
+      updatedAt: new Date().toISOString()
+    });
+
+    return {
+      ok: true,
+      data: {
+        nodeId: toCollectorPublicNodeId(rawNodeId),
+        alias,
+        name: alias || nodeReport.node.name
+      }
+    };
+  }
+);
 app.post<{ Body: CollectorNodeReport }>("/api/control-center/collector-reports", async (request, reply) => {
   const expectedToken = process.env.COLLECTOR_SHARED_TOKEN?.trim() || "openclaw-collector";
   const providedToken = String(request.headers["x-collector-token"] || "");

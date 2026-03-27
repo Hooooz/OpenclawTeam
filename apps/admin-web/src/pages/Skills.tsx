@@ -43,10 +43,10 @@ export default function Skills() {
       <div className="p-6 max-w-[1400px] mx-auto space-y-5">
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-lg font-semibold text-foreground">Skill 注册中心</h1>
+            <h1 className="text-lg font-semibold gradient-text">Skill 注册中心</h1>
             <p className="text-xs text-muted-foreground mt-0.5">共 {skills.length} 个 Skill 样例，{skills.filter(s => s.status === "active").length} 个启用中</p>
           </div>
-          <Button size="sm" className="gap-1.5 text-xs"><Plus className="h-3.5 w-3.5" /> 新建 Skill</Button>
+          <Button size="sm" className="gap-1.5 text-xs gradient-blue-purple border-0 hover:opacity-90 glow-blue transition-all"><Plus className="h-3.5 w-3.5" /> 新建 Skill</Button>
         </div>
 
         <MockDataNotice notes={["Skill 注册中心当前仅保留 1 条 mock 样例，并已标记为 MOCK。"]} />
@@ -54,7 +54,7 @@ export default function Skills() {
         <div className="flex items-center gap-3">
           <div className="relative flex-1 max-w-sm">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <Input placeholder="搜索名称或分类…" className="pl-9 h-9 text-sm" value={search} onChange={(e) => setSearch(e.target.value)} />
+            <Input placeholder="搜索名称或分类…" className="pl-9 h-9 text-sm bg-muted/30 border-border/50 input-glow focus:border-primary/40" value={search} onChange={(e) => setSearch(e.target.value)} />
           </div>
           <Select value={statusFilter} onValueChange={setStatusFilter}>
             <SelectTrigger className="w-[130px] h-9 text-sm">
@@ -70,7 +70,7 @@ export default function Skills() {
           </Select>
         </div>
 
-        <div className="rounded-md border bg-card shadow-sm overflow-hidden">
+        <div className="rounded-lg glass-card overflow-hidden">
           <Table>
             <TableHeader>
               <TableRow className="hover:bg-transparent">
@@ -91,7 +91,7 @@ export default function Skills() {
                 const st = statusMap[s.status];
                 const risk = riskBadge(s.riskLevel);
                 return (
-                  <TableRow key={s.id}>
+                  <TableRow key={s.id} className="table-row-glow transition-all">
                   <TableCell>
                       <div className="flex items-center gap-2">
                         <Link to={`/skills/${s.id}`} className="text-sm font-medium text-foreground hover:text-primary transition-colors">{s.name}</Link>

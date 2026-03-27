@@ -1,12 +1,17 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-/* Definition of the design system. All colors, gradients, fonts, etc should be defined here. 
-All colors MUST be HSL.
-*/
+/* ============================================================
+   OpenClaw Design System — Dual Theme (Light + Dark)
+   参考飞书等产品的层次感设计
+   All colors MUST be HSL.
+   ============================================================ */
 
 @layer base {
+  /* -------- LIGHT MODE (default) -------- */
   :root {
     --background: 220 20% 97%;
     --foreground: 222 47% 11%;
@@ -17,79 +22,136 @@ All colors MUST be HSL.
     --popover: 0 0% 100%;
     --popover-foreground: 222 47% 11%;
 
-    --primary: 220 60% 44%;
+    --primary: 217 91% 50%;
     --primary-foreground: 0 0% 100%;
 
-    --secondary: 220 14% 92%;
+    --secondary: 220 14% 93%;
     --secondary-foreground: 222 47% 11%;
 
     --muted: 220 14% 95%;
     --muted-foreground: 220 9% 46%;
 
-    --accent: 220 14% 92%;
-    --accent-foreground: 222 47% 11%;
+    --accent: 265 80% 55%;
+    --accent-foreground: 0 0% 100%;
 
     --destructive: 0 72% 51%;
     --destructive-foreground: 0 0% 100%;
 
     --border: 220 13% 90%;
     --input: 220 13% 90%;
-    --ring: 220 60% 44%;
+    --ring: 217 91% 50%;
 
-    --radius: 0.375rem;
+    --radius: 0.5rem;
 
-    --sidebar-background: 222 47% 11%;
-    --sidebar-foreground: 220 14% 80%;
-    --sidebar-primary: 220 60% 55%;
+    /* Sidebar — light mode: 干净白色/浅灰 */
+    --sidebar-background: 0 0% 100%;
+    --sidebar-foreground: 220 9% 46%;
+    --sidebar-primary: 217 91% 50%;
     --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 222 40% 16%;
-    --sidebar-accent-foreground: 220 14% 92%;
-    --sidebar-border: 222 30% 18%;
-    --sidebar-ring: 220 60% 55%;
+    --sidebar-accent: 220 14% 96%;
+    --sidebar-accent-foreground: 222 47% 11%;
+    --sidebar-border: 220 13% 91%;
+    --sidebar-ring: 217 91% 50%;
 
+    /* Elevated surfaces — 用于层次感 */
+    --elevated: 0 0% 100%;
+    --sunken: 220 17% 94%;
+
+    /* Status */
     --status-success: 152 60% 40%;
     --status-warning: 38 92% 50%;
     --status-danger: 0 72% 51%;
-    --status-info: 210 80% 52%;
+    --status-info: 217 91% 50%;
     --status-idle: 220 9% 46%;
+
+    /* Glow — 浅色模式用更柔和的阴影 */
+    --glow-blue: 217 91% 50%;
+    --glow-purple: 265 80% 55%;
+    --glow-green: 152 60% 40%;
+    --glow-red: 0 72% 51%;
+    --glow-amber: 38 92% 50%;
+
+    /* Glass — 浅色模式参数 */
+    --glass-bg: 0 0% 100% / 0.7;
+    --glass-border: 220 13% 90%;
+    --glass-hover: 0 0% 100% / 0.9;
+
+    /* Grid */
+    --grid-color: 220 13% 90%;
   }
 
+  /* -------- DARK MODE -------- */
+  /* 参考飞书深色模式的分层：
+     L0 侧边栏: 最深 (3%)
+     L1 页面底色: 稍浅 (7%)
+     L2 卡片/容器: 再浅 (10%)
+     L3 弹窗/悬浮: 最浅 (13%)
+     L4 hover 态: 高亮 (16%)
+  */
   .dark {
-    --background: 222.2 84% 4.9%;
-    --foreground: 210 40% 98%;
+    --background: 220 25% 7%;
+    --foreground: 220 15% 90%;
 
-    --card: 222.2 84% 4.9%;
-    --card-foreground: 210 40% 98%;
+    --card: 220 22% 10%;
+    --card-foreground: 220 15% 92%;
 
-    --popover: 222.2 84% 4.9%;
-    --popover-foreground: 210 40% 98%;
+    --popover: 220 22% 13%;
+    --popover-foreground: 220 15% 92%;
 
-    --primary: 210 40% 98%;
-    --primary-foreground: 222.2 47.4% 11.2%;
+    --primary: 210 100% 56%;
+    --primary-foreground: 220 25% 5%;
 
-    --secondary: 217.2 32.6% 17.5%;
-    --secondary-foreground: 210 40% 98%;
+    --secondary: 220 20% 16%;
+    --secondary-foreground: 220 15% 85%;
 
-    --muted: 217.2 32.6% 17.5%;
-    --muted-foreground: 215 20.2% 65.1%;
+    --muted: 220 18% 13%;
+    --muted-foreground: 220 12% 50%;
 
-    --accent: 217.2 32.6% 17.5%;
-    --accent-foreground: 210 40% 98%;
+    --accent: 265 89% 62%;
+    --accent-foreground: 0 0% 100%;
 
-    --destructive: 0 62.8% 30.6%;
-    --destructive-foreground: 210 40% 98%;
+    --destructive: 0 72% 55%;
+    --destructive-foreground: 0 0% 100%;
 
-    --border: 217.2 32.6% 17.5%;
-    --input: 217.2 32.6% 17.5%;
-    --ring: 212.7 26.8% 83.9%;
-    --sidebar-background: 240 5.9% 10%;
-    --sidebar-foreground: 240 4.8% 95.9%;
-    --sidebar-primary: 224.3 76.3% 48%;
+    --border: 220 18% 15%;
+    --input: 220 18% 15%;
+    --ring: 210 100% 56%;
+
+    /* Sidebar — L0 最深层 */
+    --sidebar-background: 220 28% 4%;
+    --sidebar-foreground: 220 12% 55%;
+    --sidebar-primary: 210 100% 56%;
     --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 240 3.7% 15.9%;
-    --sidebar-accent-foreground: 240 4.8% 95.9%;
-    --sidebar-border: 240 3.7% 15.9%;
-    --sidebar-ring: 217.2 91.2% 59.8%;
+    --sidebar-accent: 220 22% 10%;
+    --sidebar-accent-foreground: 220 15% 90%;
+    --sidebar-border: 220 20% 10%;
+    --sidebar-ring: 210 100% 56%;
+
+    /* Elevated / sunken — 用于卡片内子区域 */
+    --elevated: 220 22% 13%;
+    --sunken: 220 25% 5%;
+
+    /* Status */
+    --status-success: 152 69% 50%;
+    --status-warning: 38 92% 56%;
+    --status-danger: 0 72% 55%;
+    --status-info: 210 100% 56%;
+    --status-idle: 220 12% 50%;
+
+    /* Glow */
+    --glow-blue: 210 100% 56%;
+    --glow-purple: 265 89% 62%;
+    --glow-green: 152 69% 50%;
+    --glow-red: 0 72% 55%;
+    --glow-amber: 38 92% 56%;
+
+    /* Glass — 暗色模式参数 */
+    --glass-bg: 220 22% 10% / 0.6;
+    --glass-border: 220 18% 16%;
+    --glass-hover: 220 22% 13% / 0.8;
+
+    /* Grid */
+    --grid-color: 220 18% 12%;
   }
 }
 
@@ -98,12 +160,130 @@ All colors MUST be HSL.
     @apply border-border;
   }
 
+  html {
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  }
+
   body {
     @apply bg-background text-foreground;
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+    transition: background-color 0.2s ease, color 0.2s ease;
+  }
+
+  .font-mono, code, pre, .tabular-nums {
+    font-family: 'JetBrains Mono', ui-monospace, monospace;
   }
 }
 
+/* ============================================================
+   Glass Morphism — 自适应 light/dark
+   ============================================================ */
 @layer utilities {
+  .glass-card {
+    background: hsl(var(--glass-bg));
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid hsl(var(--glass-border));
+  }
+
+  .glass-card-hover:hover {
+    background: hsl(var(--glass-hover));
+  }
+
+  /* Elevated surface (卡片内的子区域抬高) */
+  .surface-elevated {
+    background: hsl(var(--elevated));
+  }
+
+  /* Sunken surface (卡片内的凹陷区域) */
+  .surface-sunken {
+    background: hsl(var(--sunken));
+  }
+
+  /* Glow Effects — dark 模式更强，light 模式用 shadow */
+  .glow-blue {
+    box-shadow: 0 0 20px -4px hsl(var(--glow-blue) / 0.25),
+                0 0 6px -1px hsl(var(--glow-blue) / 0.12);
+  }
+
+  .glow-purple {
+    box-shadow: 0 0 20px -4px hsl(var(--glow-purple) / 0.25),
+                0 0 6px -1px hsl(var(--glow-purple) / 0.12);
+  }
+
+  .glow-green {
+    box-shadow: 0 0 20px -4px hsl(var(--glow-green) / 0.25),
+                0 0 6px -1px hsl(var(--glow-green) / 0.12);
+  }
+
+  .glow-red {
+    box-shadow: 0 0 20px -4px hsl(var(--glow-red) / 0.25),
+                0 0 6px -1px hsl(var(--glow-red) / 0.12);
+  }
+
+  .glow-border-blue {
+    border-color: hsl(var(--glow-blue) / 0.3);
+  }
+
+  .glow-border-purple {
+    border-color: hsl(var(--glow-purple) / 0.3);
+  }
+
+  /* Tech Background Grid — 自适应 */
+  .tech-grid {
+    background-image:
+      linear-gradient(hsl(var(--grid-color) / 0.4) 1px, transparent 1px),
+      linear-gradient(90deg, hsl(var(--grid-color) / 0.4) 1px, transparent 1px);
+    background-size: 40px 40px;
+  }
+
+  .tech-grid-dense {
+    background-image:
+      linear-gradient(hsl(var(--grid-color) / 0.3) 1px, transparent 1px),
+      linear-gradient(90deg, hsl(var(--grid-color) / 0.3) 1px, transparent 1px);
+    background-size: 20px 20px;
+  }
+
+  /* Gradient text */
+  .gradient-text {
+    background: linear-gradient(135deg, hsl(var(--primary)), hsl(var(--accent)));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  /* Gradient backgrounds */
+  .gradient-blue-purple {
+    background: linear-gradient(135deg, hsl(var(--primary)), hsl(var(--accent)));
+  }
+
+  .gradient-blue-cyan {
+    background: linear-gradient(135deg, hsl(210 100% 56%), hsl(190 95% 50%));
+  }
+
+  /* Animated gradient border */
+  .animated-border {
+    position: relative;
+    overflow: hidden;
+  }
+
+  .animated-border::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    padding: 1px;
+    border-radius: inherit;
+    background: linear-gradient(135deg, hsl(var(--primary) / 0.5), hsl(var(--accent) / 0.5), hsl(var(--primary) / 0.5));
+    background-size: 200% 200%;
+    animation: border-flow 4s linear infinite;
+    -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+    mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+    -webkit-mask-composite: xor;
+    mask-composite: exclude;
+    pointer-events: none;
+  }
+
+  /* Dashboard feed scroll */
   .dashboard-feed-mask {
     mask-image: linear-gradient(to bottom, transparent 0, black 8%, black 92%, transparent 100%);
   }
@@ -115,14 +295,55 @@ All colors MUST be HSL.
   .dashboard-feed-track:hover {
     animation-play-state: paused;
   }
+
+  /* Table row hover */
+  .table-row-glow:hover {
+    background: hsl(var(--primary) / 0.04);
+    box-shadow: inset 0 0 0 1px hsl(var(--primary) / 0.08);
+  }
+
+  /* Status dot pulse */
+  .status-dot-pulse {
+    animation: dot-pulse 2s ease-in-out infinite;
+  }
+
+  /* Input focus glow */
+  .input-glow:focus {
+    box-shadow: 0 0 0 2px hsl(var(--primary) / 0.15),
+                0 0 12px -2px hsl(var(--primary) / 0.15);
+  }
 }
 
+/* ============================================================
+   Keyframes
+   ============================================================ */
 @keyframes dashboard-feed-scroll {
-  0% {
-    transform: translateY(0);
-  }
+  0% { transform: translateY(0); }
+  100% { transform: translateY(-50%); }
+}
 
-  100% {
-    transform: translateY(-50%);
-  }
+@keyframes dot-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+
+@keyframes border-flow {
+  0% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+
+@keyframes fade-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes glow-pulse {
+  0%, 100% { box-shadow: 0 0 8px -2px hsl(var(--primary) / 0.3); }
+  50% { box-shadow: 0 0 16px -2px hsl(var(--primary) / 0.5); }
+}
+
+/* Page transition */
+.page-enter {
+  animation: fade-in 0.3s ease-out;
 }

@@ -40,6 +40,7 @@ export type TriggerSource = "manual" | "timed-task" | "template" | "chat";
 export type MachineInfo = {
   id: string;
   name: string;
+  originalName?: string;
   host: string;
   runtime: string;
   status: "healthy" | "degraded" | "down";
@@ -216,6 +217,7 @@ export type SettingsData = {
   nodes: Array<{
     id: string;
     name: string;
+    originalName?: string;
     host: string;
     status: "healthy" | "degraded" | "down";
     lastCollectedAt: string;
@@ -238,11 +240,6 @@ export type NodeManagementData = {
   registration: {
     managerUrl: string;
     collectorTokenHint: string;
-    storage: {
-      controlPlaneDataFile: string;
-      schedulerHeartbeatFile: string;
-      collectorReportsFile: string;
-    };
     installers: NodeRegistrationInstaller[];
   };
 };
@@ -258,6 +255,7 @@ export type NodeDetailData = {
   node: {
     id: string;
     name: string;
+    originalName?: string;
     host: string;
   };
   latestReport: {
@@ -366,4 +364,27 @@ export async function fetchControlCenterNodeManagement() {
 
 export async function fetchControlCenterNodeDetail(nodeId: string) {
   return fetchEnvelope<NodeDetailData>(`/nodes/${encodeURIComponent(nodeId)}`);
+}
+
+export async function updateControlCenterNodeAlias(nodeId: string, alias: string) {
+  const response = await fetch(`${getControlCenterBaseUrl()}/nodes/${encodeURIComponent(nodeId)}`, {
+    method: "PATCH",
+    headers: {
+      Accept: "application/json",
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ alias }),
+  });
+
+  if (!response.ok) {
+    throw new Error(`Request failed with ${response.status}`);
+  }
+
+  const payload = (await response.json()) as ApiEnvelope<{ nodeId: string; alias: string; name: string }>;
+
+  if (!payload.ok) {
+    throw new Error(payload.message || "Control center API returned an error");
+  }
+
+  return payload.data;
 }

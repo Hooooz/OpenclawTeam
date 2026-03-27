@@ -8,20 +8,14 @@ async function loadModule() {
   return import(moduleUrl);
 }
 
-test("buildNodeRegistrationBundle returns storage paths and installer scripts", async () => {
+test("buildNodeRegistrationBundle returns installer scripts", async () => {
   const { buildNodeRegistrationBundle } = await loadModule();
   const bundle = buildNodeRegistrationBundle({
     managerUrl: "http://100.80.81.15:3201",
     collectorToken: "openclaw-collector",
-    storage: {
-      controlPlaneDataFile: "C:\\OpenclawTeam\\data\\control-plane.json",
-      schedulerHeartbeatFile: "C:\\OpenclawTeam\\data\\schedule-sweep-heartbeat.json",
-      collectorReportsFile: "C:\\OpenclawTeam\\.runtime\\collector-reports.json",
-    },
   });
 
   assert.equal(bundle.managerUrl, "http://100.80.81.15:3201");
-  assert.equal(bundle.storage.collectorReportsFile, "C:\\OpenclawTeam\\.runtime\\collector-reports.json");
   assert.equal(bundle.installers.length, 3);
 
   const linux = bundle.installers.find((item: { platform: string }) => item.platform === "linux");
@@ -43,11 +37,6 @@ test("buildNodeRegistrationBundle masks the shared token in the summary", async 
   const bundle = buildNodeRegistrationBundle({
     managerUrl: "http://127.0.0.1:3201",
     collectorToken: "super-secret-token",
-    storage: {
-      controlPlaneDataFile: "/srv/openclaw/data/control-plane.json",
-      schedulerHeartbeatFile: "/srv/openclaw/data/schedule-sweep-heartbeat.json",
-      collectorReportsFile: "/srv/openclaw/.runtime/collector-reports.json",
-    },
   });
 
   assert.equal(bundle.collectorTokenHint, "supe...oken");
